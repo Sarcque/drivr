@@ -32,9 +32,11 @@ class PlacesTest {
   }
 
   @Test
-  fun overpass_query_uses_a_line_corridor() {
-    val q = OverpassClient.buildQuery(PlaceCategory.FUEL, "around:2000,52.1,5.1,52.2,5.2")
-    assertEquals("[out:json][timeout:25];(nwr[amenity=fuel](around:2000,52.1,5.1,52.2,5.2););out center tags 200;", q)
+  fun overpass_query_uses_small_boxes() {
+    val q = OverpassClient.buildQuery(PlaceCategory.FUEL, listOf("52.0,5.0,52.1,5.1", "52.1,5.1,52.2,5.2"), 120, timeoutS = 10)
+    assertEquals(
+        "[out:json][timeout:10];(nwr[amenity=fuel](52.0,5.0,52.1,5.1);nwr[amenity=fuel](52.1,5.1,52.2,5.2););out center tags qt 120;",
+        q)
   }
 
   @Test
@@ -109,5 +111,29 @@ class PlacesTest {
     assertFalse(inFrance(LatLng(50.85, 5.69))) // Maastricht
     assertFalse(inFrance(LatLng(50.85, 4.35))) // Brussels
     assertFalse(inFrance(LatLng(46.2, 7.36))) // Sion, Switzerland
+  }
+
+  @Test
+  fun route_boxes_cover_the_next_40_km_in_a_few_small_queries() {
+    val c = RouteCorridor(route())
+    val boxes = c.boxes(0.0, 40_000.0, padM = 2000.0)
+    assertEquals(3, boxes.size) // 25 km route in 10 km steps
+    // Every route point is inside some box.
+    route().forEach { p -> assertTrue(boxes.any { p.lat in it.s..it.n && p.lon in it.w..it.e }) }
+    // Each box stays small (well under 15 x 15 km).
+    boxes.forEach { assertTrue((it.n - it.s) < 0.14 && (it.e - it.w) < 0.22) }
+  }
+
+  @Test
+  fun cache_expires() {
+    var t = 0L
+    val cache = TtlCache<String, String>(ttlMs = 1000, maxEntries = 2) { t }
+    cache["a"] = "1"
+    assertEquals("1", cache["a"])
+    t = 1500
+    assertNull(cache["a"])
+    cache["b"] = "2"; cache["c"] = "3"; cache["d"] = "4"
+    assertNull(cache["b"]) // evicted, oldest
+    assertEquals("4", cache["d"])
   }
 }

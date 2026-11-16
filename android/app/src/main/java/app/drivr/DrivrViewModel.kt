@@ -14,6 +14,7 @@ import app.drivr.places.LatLng
 import app.drivr.places.Place
 import app.drivr.places.PlaceCategory
 import app.drivr.places.PlaceResult
+import app.drivr.places.PlacesUpdate
 import app.drivr.places.PlacesRepository
 import app.drivr.ui.remainingGeometry
 import kotlinx.coroutines.Job
@@ -59,6 +60,10 @@ data class PlacesState(
     val category: PlaceCategory? = null,
     val alongRoute: Boolean = false,
     val loading: Boolean = false,
+    /** First results are shown; more (along the route) are still coming. */
+    val refining: Boolean = false,
+    /** A soft notice, e.g. the route part timed out but nearby results are shown. */
+    val note: String? = null,
     val results: List<PlaceResult> = emptyList(),
     val error: String? = null,
     val selected: PlaceResult? = null,
@@ -230,7 +235,41 @@ class DrivrViewModel(
 
   fun searchCategory(category: PlaceCategory) {
     _places.value = _places.value.copy(open = true, category = category, query = "", selected = null)
-    load { here, route -> placesRepo.byCategory(category, here, route) }
+    loadProgressive { here, route -> placesRepo.byCategory(category, here, route) }
+  }
+
+  /** A search that shows the first close results right away and refines them as more arrive. */
+  private fun loadProgressive(source: (LatLng, List<LatLng>?) -> kotlinx.coroutines.flow.Flow<PlacesUpdate>) {
+    placesJob?.cancel()
+    val here = here() ?: return
+    val route = routeAhead()
+    _places.value =
+        _places.value.copy(
+            loading = true, refining = false, results = emptyList(), error = null, note = null,
+            alongRoute = route != null, priceCountry = placesRepo.priceCountry(here))
+    placesJob =
+        viewModelScope.launch {
+          try {
+            source(here, route).collect { u ->
+              _places.value =
+                  _places.value.copy(loading = false, refining = !u.done, results = u.results, note = u.note)
+            }
+          } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+          } catch (e: Exception) {
+            Log.w(TAG, "Places search failed", e)
+            _places.value =
+                _places.value.copy(
+                    loading = false, refining = false,
+                    error = "The map server didn't answer in time. Check your connection and try again.")
+          }
+        }
+  }
+
+  /** Runs the last search again (after an error). */
+  fun retryPlaces() {
+    val s = _places.value
+    if (s.category != null) searchCategory(s.category) else if (s.query.isNotBlank()) searchText(s.query)
   }
 
   fun searchText(query: String) {
@@ -260,7 +299,7 @@ class DrivrViewModel(
           } catch (e: Exception) {
             Log.w(TAG, "Places search failed", e)
             _places.value =
-                _places.value.copy(loading = false, error = "Couldn't reach the map server. Try again.")
+                _places.value.copy(loading = false, error = "Search didn't answer in time. Check your connection and try again.")
           }
         }
   }

@@ -90,7 +90,7 @@ class PlacesScreenshotTest {
     val state = PlacesState(open = true, category = PlaceCategory.FUEL, alongRoute = true, results = results)
     paparazzi.snapshot {
       Screen("bg_fuel_route.png") {
-        PlacesSheet(state, {}, {}, {}, Modifier.align(Alignment.BottomCenter), maxListHeight = 470.dp)
+        PlacesSheet(state, {}, {}, {}, Modifier.align(Alignment.BottomCenter))
       }
     }
   }
@@ -127,7 +127,7 @@ class PlacesScreenshotTest {
         Column(Modifier.align(Alignment.TopCenter).padding(horizontal = 12.dp, vertical = 36.dp)) {
           PlacesSearchBar("Albert Heijn", {})
         }
-        PlacesSheet(state, {}, {}, {}, Modifier.align(Alignment.BottomCenter), maxListHeight = 470.dp)
+        PlacesSheet(state, {}, {}, {}, Modifier.align(Alignment.BottomCenter))
       }
     }
   }
@@ -185,5 +185,32 @@ class PlacesScreenshotTest {
   fun speed_camera_ahead() {
     val cam = app.drivr.cameras.SpeedCamera("c", app.drivr.cameras.CameraKind.SPEED, LatLng(52.12, 5.30), maxSpeedKmh = 100)
     drivingScreen { CameraAheadCard(app.drivr.cameras.CameraAhead(cam, 450.0), averageKmh = null) }
+  }
+
+  @Test
+  fun fuel_first_results_while_refining() {
+    // What the driver sees ~1 s after tapping Fuel: the closest few, route still being checked.
+    val near = rankPlaces(pois("fuel", PlaceCategory.FUEL, emptyMap()), origin, null, 3000.0).filter { it.distanceM < 3000 }
+    val state = PlacesState(open = true, category = PlaceCategory.FUEL, alongRoute = true, refining = true, results = near)
+    paparazzi.snapshot {
+      Screen("bg_fuel_route.png") { PlacesSheet(state, {}, {}, {}, Modifier.align(Alignment.BottomCenter)) }
+    }
+  }
+
+  @Test
+  fun search_error_with_retry() {
+    val state = PlacesState(open = true, category = PlaceCategory.FUEL, error = "Search didn't answer in time. Check your connection and try again.")
+    paparazzi.snapshot {
+      Screen("bg_browse.png") { PlacesSheet(state, {}, {}, {}, Modifier.align(Alignment.BottomCenter)) }
+    }
+  }
+
+  @Test
+  fun driving_controls_menu_open() {
+    paparazzi.snapshot {
+      Screen("bg_detail.png") {
+        DrivingControls({}, {}, {}, arAuto = true, onToggleArAuto = {}, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp), initiallyOpen = true)
+      }
+    }
   }
 }

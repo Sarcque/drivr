@@ -150,10 +150,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
                   // Valhalla's ETA has no live traffic; add NDW's reported delays on the route.
                   val delayS = trafficAhead.sumOf { it.event.delaySeconds ?: 0.0 }
                   Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    camerasAhead.first.relevant()?.let { CameraAheadCard(it, camerasAhead.second) }
-                    val jam = trafficAhead.firstOrNull { it.inside }
-                    if (jam != null) JamCountdownCard(jam)
-                    else trafficAhead.firstOrNull { it.distanceM < 30_000 }?.let { TrafficAheadCard(it) }
+                    DrivingAlert(camerasAhead.first, camerasAhead.second, trafficAhead)
                     TripCards(
                         speedLimitKmh = state.speedLimitKmh(),
                         speedKmh = state.location?.speed?.value?.let { (it * 3.6).roundToInt() },
@@ -186,20 +183,14 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   )
 
   if (uiState.isNavigating() && !showAr && !places.open) {
-    Column(
-        Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-      StopsButton(onClick = viewModel::openPlaces)
-      ArToggle(
-          auto = arAuto,
-          onOpen = { arManual = true },
-          onToggleAuto = { arAuto = !arAuto },
-          onTurns = { showTurns = !showTurns },
-          modifier = Modifier,
-      )
-    }
+    DrivingControls(
+        onSearch = viewModel::openPlaces,
+        onTurns = { showTurns = !showTurns },
+        onAr = { arManual = true },
+        arAuto = arAuto,
+        onToggleArAuto = { arAuto = !arAuto },
+        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
+    )
   }
 
   // Search bar and categories while browsing; the places sheet or a place's details when open.
@@ -234,6 +225,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
           onClose = viewModel::closePlaces,
           priceCountry = places.priceCountry,
           modifier = sheetModifier,
+          onRetry = viewModel::retryPlaces,
       )
     }
   }
@@ -270,72 +262,55 @@ private fun NavigationUiState.speedLimitKmh(): Int? {
   }
 }
 
+/** Browsing: one compact card. Search sits at the top; this only offers the test drive. */
 @Composable
-private fun ArToggle(
-    auto: Boolean,
-    onOpen: () -> Unit,
-    onToggleAuto: () -> Unit,
-    onTurns: () -> Unit,
-    modifier: Modifier,
-) {
-  Column(
-      modifier
-          .clip(RoundedCornerShape(16.dp))
-          .background(Drivr.card)
-          .padding(6.dp),
-      horizontalAlignment = Alignment.CenterHorizontally,
+internal fun StartPanel(status: RouteStatus, onDemoDrive: () -> Unit, modifier: Modifier) {
+  Row(
+      modifier =
+          modifier
+              .navigationBarsPadding()
+              .padding(12.dp)
+              .fillMaxWidth()
+              .clip(RoundedCornerShape(20.dp))
+              .background(Drivr.card)
+              .padding(start = 18.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
+      verticalAlignment = Alignment.CenterVertically,
   ) {
-    TextButton(onClick = onTurns) { Text("Turns", color = Color.White, fontSize = 12.sp) }
-    TextButton(onClick = onOpen) { Text("AR", color = Color.White, fontWeight = FontWeight.Bold) }
-    TextButton(onClick = onToggleAuto) {
-      Text(
-          if (auto) "Auto\non" else "Auto\noff",
-          color = if (auto) Drivr.accent else Drivr.textMuted,
-          fontSize = 11.sp,
-      )
+    Column(Modifier.weight(1f)) {
+      when (status) {
+        is RouteStatus.Failed -> Text(status.message, color = Color(0xFFFF8A80), fontSize = 14.sp, maxLines = 2)
+        else -> {
+          Text("Long-press the map to go there", color = Drivr.text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+          Text("or try a simulated drive", color = Drivr.textMuted, fontSize = 13.sp)
+        }
+      }
+    }
+    if (status is RouteStatus.Loading) {
+      CircularProgressIndicator(Modifier.padding(horizontal = 16.dp).size(22.dp), color = Color.White, strokeWidth = 2.dp)
+    } else {
+      Button(onClick = onDemoDrive, colors = ButtonDefaults.buttonColors(containerColor = Drivr.accent)) {
+        Text("Test drive")
+      }
     }
   }
 }
 
+/**
+ * At most one alert above the arrival card, the most urgent: inside an average-speed section or
+ * a camera close by, then being inside a jam, then the next jam within 30 km.
+ */
 @Composable
-internal fun StartPanel(status: RouteStatus, onDemoDrive: () -> Unit, modifier: Modifier) {
-  Column(
-      modifier =
-          modifier
-              .navigationBarsPadding()
-              .padding(16.dp)
-              .fillMaxWidth()
-              .clip(RoundedCornerShape(20.dp))
-              .background(Drivr.card)
-              .padding(20.dp)
-  ) {
-    Text("Drivr", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-    Spacer(Modifier.height(4.dp))
-    Text(
-        "Search above or long-press the map to drive there, or take the test drive through " +
-            "Knooppunt Rijnsweerd (Utrecht) with simulated GPS. While driving, tap Stops to find " +
-            "fuel, charging or food along the route.",
-        color = Drivr.textMuted,
-        fontSize = 14.sp,
-    )
-    Spacer(Modifier.height(14.dp))
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Start) {
-      Button(
-          onClick = onDemoDrive,
-          enabled = status !is RouteStatus.Loading,
-          colors = ButtonDefaults.buttonColors(containerColor = Drivr.accent),
-      ) {
-        Text("Start test drive")
-      }
-      Spacer(Modifier.width(14.dp))
-      when (status) {
-        RouteStatus.Loading ->
-            CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
-        is RouteStatus.Failed ->
-            Text(status.message, color = Color(0xFFFF8A80), fontSize = 13.sp, maxLines = 2)
-        RouteStatus.Idle -> {}
-      }
-    }
+fun DrivingAlert(
+    cameras: List<app.drivr.cameras.CameraAhead>,
+    averageKmh: Double?,
+    traffic: List<app.drivr.traffic.TrafficAhead>,
+) {
+  val cam = cameras.firstOrNull { it.inside } ?: cameras.firstOrNull { it.distanceM < 1000 }
+  val jam = traffic.firstOrNull { it.inside }
+  when {
+    cam != null -> CameraAheadCard(cam, averageKmh)
+    jam != null -> JamCountdownCard(jam)
+    else -> traffic.firstOrNull { it.distanceM < 30_000 }?.let { TrafficAheadCard(it) }
   }
 }
 

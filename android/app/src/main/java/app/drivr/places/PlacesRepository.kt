@@ -1,7 +1,13 @@
 package app.drivr.places
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+
+/** One step of a progressive search: results so far, and whether more are coming. */
+data class PlacesUpdate(val results: List<PlaceResult>, val done: Boolean, val note: String? = null)
 
 /** A place, ranked for the driver: how far, and (when navigating) where along the route. */
 data class PlaceResult(
@@ -29,23 +35,56 @@ class PlacesRepository(
   /** The country whose official price feed covers [at], or null where none exists (e.g. NL). */
   fun priceCountry(at: LatLng): String? = prices.sourceFor(at)?.country
 
-  /** Places of a category: along the next [aheadM] of [route] when navigating, else around [here]. */
-  suspend fun byCategory(
+  /**
+   * Places of a category in two steps, so the driver sees something within a second or two:
+   * 1. A few places within ~3 km of the car (small, fast query), with route info where they fit.
+   * 2. When navigating: the next [aheadM] of the route, as a few bounding boxes, filtered to the
+   *    corridor and merged in driving order. If step 2 fails, step 1's results stay.
+   * Not navigating and nothing close: one wider nearby search.
+   */
+  fun byCategory(
       category: PlaceCategory,
       here: LatLng,
       route: List<LatLng>?,
-      aheadM: Double = 100_000.0,
-  ): List<PlaceResult> =
-      withContext(Dispatchers.IO) {
-        val places =
-            if (route != null && route.size >= 2) {
-              val line = RouteCorridor(route).sample(aheadM)
-              overpass.alongLine(category, line, corridorFor(category))
-            } else {
-              overpass.nearby(category, here, if (category == PlaceCategory.PARKING) 2000 else 6000)
-            }
-        rank(places, here, route, corridorFor(category).toDouble())
+      aheadM: Double = 40_000.0,
+  ): Flow<PlacesUpdate> = flow {
+    val corridor = corridorFor(category).toDouble()
+    val nearRadius = if (category == PlaceCategory.PARKING) 1000 else 3000
+    val navigating = route != null && route.size >= 2
+    val near =
+        runCatching { overpass.nearby(category, here, nearRadius, limit = 20) }
+            .getOrElse { e -> if (!navigating) throw e else emptyList() }
+    val nearRanked = rankNearby(near, here, route, corridor)
+    if (!navigating) {
+      if (nearRanked.size >= 3) {
+        emit(PlacesUpdate(nearRanked, done = true))
+      } else {
+        emit(PlacesUpdate(nearRanked, done = false))
+        val wide = overpass.nearby(category, here, 10_000, limit = 20)
+        emit(PlacesUpdate(rankNearby(wide, here, null, corridor), done = true))
       }
+      return@flow
+    }
+    emit(PlacesUpdate(nearRanked, done = false))
+    val boxes = RouteCorridor(route!!).boxes(0.0, aheadM, padM = corridor)
+    val along = runCatching { overpass.inBoxes(category, boxes) }
+    along.onSuccess { found ->
+      val merged = rank(near + found, here, route, corridor)
+      emit(PlacesUpdate(merged, done = true))
+    }
+    along.onFailure {
+      emit(PlacesUpdate(nearRanked, done = true, note = "Showing places near you; the route search timed out."))
+    }
+  }.flowOn(Dispatchers.IO)
+
+  /** Near the car: on-route places first (in driving order), then the rest by distance. */
+  private fun rankNearby(places: List<Place>, here: LatLng, route: List<LatLng>?, corridorM: Double): List<PlaceResult> {
+    val all = rank(places, here, route, null)
+    val onRoute = all.filter { it.offRouteM != null && it.offRouteM <= corridorM && (it.alongRouteM ?: 0.0) > 0 }
+        .sortedBy { it.alongRouteM }
+    return onRoute + (all - onRoute.toSet()).map { it.copy(alongRouteM = null, offRouteM = null, detourS = null) }
+        .sortedBy { it.distanceM }
+  }
 
   /** Typed search ("Albert Heijn", "IKEA"), biased to the car's position. */
   suspend fun search(text: String, here: LatLng, route: List<LatLng>?): List<PlaceResult> =
