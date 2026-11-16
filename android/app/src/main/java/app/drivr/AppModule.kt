@@ -94,7 +94,8 @@ object AppModule {
   val places: PlacesRepository by lazy {
     val http =
         OkHttpClient.Builder()
-            .callTimeout(Duration.ofSeconds(30))
+            .connectTimeout(Duration.ofSeconds(5))
+            .callTimeout(Duration.ofSeconds(12))
             .addInterceptor { chain ->
               // OSM services ask clients to identify themselves.
               chain.proceed(chain.request().newBuilder().header("User-Agent", PhotonClient.USER_AGENT).build())

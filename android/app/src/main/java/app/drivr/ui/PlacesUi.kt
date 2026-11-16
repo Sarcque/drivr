@@ -29,6 +29,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -172,14 +174,10 @@ fun PlacesSearchBar(
           .padding(horizontal = 18.dp, vertical = 14.dp),
       verticalAlignment = Alignment.CenterVertically,
   ) {
-    Canvas(Modifier.size(18.dp)) {
-      val u = size.width / 24f
-      drawCircle(Drivr.textMuted, 7f * u, Offset(10f * u, 10f * u), style = Stroke(2.5f * u))
-      drawLine(Drivr.textMuted, Offset(15.5f * u, 15.5f * u), Offset(21f * u, 21f * u), 2.5f * u, StrokeCap.Round)
-    }
+    SearchGlyph(Drivr.textMuted, Modifier.size(18.dp))
     Spacer(Modifier.width(12.dp))
     Box(Modifier.weight(1f)) {
-      if (query.isEmpty()) Text("Search places, fuel, food…", color = Drivr.textMuted, fontSize = 17.sp)
+      if (query.isEmpty()) Text("Where to?", color = Drivr.textMuted, fontSize = 17.sp)
       BasicTextField(
           value = query,
           onValueChange = {
@@ -200,34 +198,49 @@ fun CategoryChips(
     selected: PlaceCategory?,
     onSelect: (PlaceCategory) -> Unit,
     modifier: Modifier = Modifier,
-    categories: List<PlaceCategory> = PlaceCategory.entries,
+    compact: Boolean = false,
 ) {
+  var more by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+  val shown = if (more || (selected != null && selected !in MainCategories)) PlaceCategory.entries else MainCategories
   Row(
       modifier.horizontalScroll(rememberScrollState()),
       horizontalArrangement = Arrangement.spacedBy(8.dp),
   ) {
-    categories.forEach { c ->
+    shown.forEach { c ->
       val on = c == selected
       Row(
           Modifier.clip(RoundedCornerShape(20.dp))
-              .background(if (on) c.color() else Drivr.card)
+              .background(if (on) c.color() else if (compact) Drivr.cardBand else Drivr.card)
               .clickable { onSelect(c) }
-              .padding(start = 6.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
+              .padding(start = 6.dp, end = 12.dp, top = 5.dp, bottom = 5.dp),
           verticalAlignment = Alignment.CenterVertically,
       ) {
-        PlaceIcon(c, size = 24.dp)
-        Spacer(Modifier.width(8.dp))
-        Text(c.label, color = Drivr.text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        PlaceIcon(c, size = 22.dp)
+        Spacer(Modifier.width(7.dp))
+        Text(c.label, color = Drivr.text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
       }
+    }
+    if (shown.size < PlaceCategory.entries.size) {
+      Text(
+          "More",
+          color = Drivr.text,
+          fontSize = 14.sp,
+          fontWeight = FontWeight.Medium,
+          modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(if (compact) Drivr.cardBand else Drivr.card)
+              .clickable { more = true }.padding(horizontal = 14.dp, vertical = 7.dp),
+      )
     }
   }
 }
 
 // ---- Results list -------------------------------------------------------------------------------
 
+/** The four categories drivers want most; the rest sit behind "More". */
+val MainCategories = listOf(PlaceCategory.FUEL, PlaceCategory.CHARGING, PlaceCategory.FOOD, PlaceCategory.GROCERIES)
+
 /**
- * Bottom sheet with places: along the route in driving order while navigating ("in 12 km,
- * +3 min"), or nearest first when browsing.
+ * Bottom sheet with places. Shows the first close results as soon as they arrive, then refines
+ * them with places along the route (in driving order) while a small line says so.
  */
 @Composable
 fun PlacesSheet(
@@ -237,101 +250,138 @@ fun PlacesSheet(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     priceCountry: String? = null,
-    maxListHeight: Dp = 420.dp,
+    maxListHeight: Dp = 360.dp,
+    onRetry: () -> Unit = {},
 ) {
   Column(
       modifier
           .fillMaxWidth()
           .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
           .background(Drivr.card)
-          .padding(top = 10.dp)
+          .padding(top = 8.dp, bottom = 8.dp)
   ) {
     Box(Modifier.align(Alignment.CenterHorizontally).size(width = 36.dp, height = 4.dp).clip(CircleShape).background(Drivr.inactive))
-    Row(Modifier.padding(start = 20.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.padding(start = 20.dp, end = 12.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
       Column(Modifier.weight(1f)) {
-        Text(sheetTitle(state), color = Drivr.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text(sheetSubtitle(state), color = Drivr.textMuted, fontSize = 13.sp)
+        Text(sheetTitle(state), color = Drivr.text, fontSize = 19.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        StatusLine(state)
       }
-      Text(
-          "Close",
-          color = Drivr.accent,
-          fontSize = 15.sp,
-          fontWeight = FontWeight.SemiBold,
-          modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClose).padding(12.dp),
-      )
+      CloseButton(onClose)
     }
-    CategoryChips(state.category, onSelectCategory, Modifier.padding(start = 16.dp, top = 10.dp, bottom = 10.dp))
-    HorizontalDivider(color = Drivr.cardBand)
+    if (state.query.isBlank()) {
+      CategoryChips(state.category, onSelectCategory, Modifier.padding(start = 16.dp, top = 10.dp, bottom = 8.dp), compact = true)
+    }
     when {
-      state.loading ->
-          Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(Modifier.size(28.dp), color = Drivr.accent, strokeWidth = 3.dp)
-          }
-      state.error != null -> Message(state.error)
+      state.loading -> Message("Looking nearby…", spinner = true)
+      state.error != null -> ErrorMessage(state.error, onRetry)
+      state.results.isEmpty() && state.refining -> Message("Nothing right here. Checking the road ahead…", spinner = true)
       state.results.isEmpty() && (state.category != null || state.query.isNotBlank()) ->
-          Message(if (state.alongRoute) "Nothing found within reach of your route." else "Nothing found nearby.")
+          Message(if (state.alongRoute) "Nothing within reach of your route." else "Nothing found nearby.")
+      state.results.isEmpty() -> {}
       else ->
           LazyColumn(Modifier.heightIn(max = maxListHeight)) {
-            items(state.results, key = { it.place.id }) { r ->
-              PlaceRow(r, onClick = { onSelect(r) })
-              HorizontalDivider(color = Drivr.cardBand, modifier = Modifier.padding(start = 70.dp))
-            }
-            if (state.category == PlaceCategory.FUEL && priceCountry == null) {
-              item { PriceCoverageNote(Modifier.padding(16.dp)) }
+            items(state.results, key = { it.place.id }) { r -> PlaceRow(r, onClick = { onSelect(r) }) }
+            if (state.category == PlaceCategory.FUEL && priceCountry == null && !state.refining) {
+              item { PriceCoverageNote(Modifier.padding(horizontal = 20.dp, vertical = 10.dp)) }
             }
           }
     }
   }
 }
 
+@Composable
+private fun StatusLine(s: PlacesState) {
+  Row(verticalAlignment = Alignment.CenterVertically) {
+    if (s.refining && s.results.isNotEmpty()) {
+      CircularProgressIndicator(Modifier.size(11.dp), color = Drivr.textMuted, strokeWidth = 1.5.dp)
+      Spacer(Modifier.width(6.dp))
+    }
+    val text =
+        when {
+          s.loading -> "Searching…"
+          s.refining && s.results.isNotEmpty() -> "${s.results.size} close by · checking the road ahead"
+          s.note != null -> s.note
+          s.results.isEmpty() -> if (s.category == null && s.query.isBlank()) "Pick a category or type a name" else ""
+          s.alongRoute && s.category != null -> "${s.results.size} on your route, in driving order"
+          else -> "${s.results.size} nearby"
+        }
+    Text(text, color = if (s.note != null && !s.refining) Drivr.hint else Drivr.textMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+  }
+}
+
 private fun sheetTitle(s: PlacesState): String =
     when {
-      s.category != null -> s.category.label + if (s.alongRoute) " on your route" else " nearby"
-      s.query.isNotBlank() -> "“${s.query.trim()}”"
+      s.category != null -> s.category.label
+      s.query.isNotBlank() -> s.query.trim()
       else -> if (s.alongRoute) "Add a stop" else "Find a place"
     }
 
-private fun sheetSubtitle(s: PlacesState): String =
-    when {
-      s.loading -> "Searching OpenStreetMap…"
-      s.alongRoute && s.category != null -> "Next 100 km, in driving order · ${s.results.size} found"
-      s.category != null -> "Nearest first · ${s.results.size} found"
-      s.query.isNotBlank() -> "${s.results.size} results"
-      else -> "Pick a category or type a name"
-    }
-
 @Composable
-private fun Message(text: String) {
-  Text(text, color = Drivr.textMuted, fontSize = 15.sp, modifier = Modifier.padding(24.dp))
+private fun CloseButton(onClick: () -> Unit) {
+  Box(
+      Modifier.size(36.dp).clip(CircleShape).background(Drivr.cardBand).clickable(onClick = onClick),
+      contentAlignment = Alignment.Center,
+  ) {
+    Canvas(Modifier.size(12.dp)) {
+      drawLine(Drivr.textMuted, Offset.Zero, Offset(size.width, size.height), 2.dp.toPx(), StrokeCap.Round)
+      drawLine(Drivr.textMuted, Offset(size.width, 0f), Offset(0f, size.height), 2.dp.toPx(), StrokeCap.Round)
+    }
+  }
 }
 
+@Composable
+private fun Message(text: String, spinner: Boolean = false) {
+  Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+    if (spinner) {
+      CircularProgressIndicator(Modifier.size(18.dp), color = Drivr.accent, strokeWidth = 2.dp)
+      Spacer(Modifier.width(12.dp))
+    }
+    Text(text, color = Drivr.textMuted, fontSize = 15.sp)
+  }
+}
+
+@Composable
+private fun ErrorMessage(text: String, onRetry: () -> Unit) {
+  Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+    Text(text, color = Drivr.textMuted, fontSize = 15.sp)
+    Spacer(Modifier.height(10.dp))
+    Text(
+        "Try again",
+        color = Drivr.accent,
+        fontSize = 15.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(Drivr.cardBand).clickable(onClick = onRetry)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    )
+  }
+}
+
+/** One place: name, one line of the facts that matter, and how far. */
 @Composable
 fun PlaceRow(r: PlaceResult, onClick: () -> Unit, modifier: Modifier = Modifier) {
   val p = r.place
   Row(
-      modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+      modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 11.dp),
       verticalAlignment = Alignment.CenterVertically,
   ) {
-    PlaceIcon(p.category, size = 40.dp)
+    PlaceIcon(p.category, size = 34.dp)
     Spacer(Modifier.width(14.dp))
     Column(Modifier.weight(1f)) {
-      Text(p.name, color = Drivr.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      val facts = facts(p)
-      if (facts.isNotEmpty()) {
-        Text(facts.joinToString(" · "), color = Drivr.textMuted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Text(p.name, color = Drivr.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      val line = facts(p).take(2) + listOfNotNull("24/7".takeIf { p.is24h })
+      if (line.isNotEmpty()) {
+        Text(line.joinToString(" · "), color = Drivr.textMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
       }
-      if (p.is24h) Text("Open 24/7", color = Drivr.ok, fontSize = 13.sp)
     }
     Spacer(Modifier.width(10.dp))
     Column(horizontalAlignment = Alignment.End) {
-      r.prices?.let { cheapest(it) }?.let { (fuel, price) ->
-        Text(formatPrice(price), color = Drivr.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-        Text(fuel, color = Drivr.textMuted, fontSize = 12.sp)
-        return@Column
-      }
-      if (r.alongRouteM != null) {
-        Text("in ${formatDistance(r.alongRouteM)}", color = Drivr.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        r.detourS?.let { Text(detourText(it, estimate = true), color = Drivr.textMuted, fontSize = 13.sp) }
+      val price = r.prices?.let { cheapest(it) }
+      if (price != null) {
+        Text(formatPrice(price.second), color = Drivr.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(price.first, color = Drivr.textMuted, fontSize = 12.sp)
+      } else if (r.alongRouteM != null) {
+        Text(formatDistance(r.alongRouteM), color = Drivr.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        r.detourS?.let { Text(detourText(it, estimate = true), color = Drivr.textMuted, fontSize = 12.sp) }
       } else {
         Text(formatDistance(r.distanceM), color = Drivr.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
       }
@@ -341,18 +391,17 @@ fun PlaceRow(r: PlaceResult, onClick: () -> Unit, modifier: Modifier = Modifier)
 
 private fun facts(p: Place): List<String> =
     when (p.category) {
-      PlaceCategory.FUEL -> listOfNotNull(p.brand?.takeIf { !p.name.contains(it, ignoreCase = true) }) + p.fuels.take(4)
+      PlaceCategory.FUEL -> listOfNotNull(p.brand?.takeIf { !p.name.contains(it, ignoreCase = true) }) + p.fuels
       PlaceCategory.CHARGING ->
-          listOfNotNull(p.maxPowerKw?.let { "Up to ${Place.formatKw(it)}" }, p.tags["capacity"]?.let { "$it points" }) +
-              p.sockets.map { it.substringBefore(' ') }.distinct().take(3)
-      PlaceCategory.FOOD, PlaceCategory.COFFEE -> listOfNotNull(p.cuisine, p.tags["amenity"]?.takeIf { it == "fast_food" }?.let { "Fast food" }, p.address)
+          listOfNotNull(p.maxPowerKw?.let { "Up to ${Place.formatKw(it)}" }) + p.sockets.map { it.substringBefore(' ') }.distinct()
+      PlaceCategory.FOOD, PlaceCategory.COFFEE -> listOfNotNull(p.cuisine, p.address)
       else -> listOfNotNull(p.brand?.takeIf { it != p.name }, p.address)
     }
 
 fun detourText(seconds: Double, estimate: Boolean): String {
   val min = (seconds / 60).roundToInt()
   val t = if (min < 1) "<1 min" else "$min min"
-  return if (estimate) "+$t detour" else "Adds $t"
+  return if (estimate) "+$t" else "Adds $t"
 }
 
 fun formatPrice(euro: Double): String = String.format(Locale.ROOT, "€%.3f", euro).replace('.', ',')
@@ -364,12 +413,9 @@ private fun cheapest(p: FuelPrices): Pair<String, Double>? =
 @Composable
 fun PriceCoverageNote(modifier: Modifier = Modifier) {
   Text(
-      "No pump prices here: the Netherlands and Belgium don't publish per-station prices as open " +
-          "data. Drivr shows official prices where governments do (France today; Spain, Italy and " +
-          "Austria next).",
-      color = Drivr.textMuted,
+      "No pump prices: the Netherlands doesn't publish them as open data.",
+      color = Drivr.inactive,
       fontSize = 12.sp,
-      lineHeight = 16.sp,
       modifier = modifier,
   )
 }
@@ -394,90 +440,66 @@ fun PlaceDetailCard(
           .fillMaxWidth()
           .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
           .background(Drivr.card)
-          .padding(20.dp)
+          .padding(horizontal = 20.dp, vertical = 18.dp)
   ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-      PlaceIcon(p.category, size = 48.dp)
+      PlaceIcon(p.category, size = 40.dp)
       Spacer(Modifier.width(14.dp))
       Column(Modifier.weight(1f)) {
-        Text(p.name, color = Drivr.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-        Text(
-            listOfNotNull(p.category?.label, p.address).joinToString(" · "),
-            color = Drivr.textMuted,
-            fontSize = 14.sp,
-            maxLines = 2,
-        )
+        Text(p.name, color = Drivr.text, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(summary(result, exactDetourS), color = Drivr.textMuted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
       }
-      Text("Back", color = Drivr.accent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-          modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onBack).padding(8.dp))
-    }
-
-    // Where it is relative to the trip.
-    Spacer(Modifier.height(14.dp))
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-      if (result.alongRouteM != null) {
-        Stat("On route in", formatDistance(result.alongRouteM), Modifier.weight(1f))
-        Stat("Off route", formatDistance(result.offRouteM ?: 0.0), Modifier.weight(1f))
-        Stat(
-            if (exactDetourS != null) "Extra time" else "Extra time (est.)",
-            ((exactDetourS ?: result.detourS ?: 0.0) / 60).roundToInt().let { if (it < 1) "<1 min" else "+$it min" },
-            Modifier.weight(1f),
-            highlight = exactDetourS != null,
-        )
-      } else {
-        Stat("Distance", formatDistance(result.distanceM), Modifier.weight(1f))
-        p.openingHours?.let { Stat("Hours", if (p.is24h) "24/7" else it, Modifier.weight(2f)) }
-      }
+      Spacer(Modifier.width(8.dp))
+      CloseButton(onBack)
     }
 
     val chips = buildList {
       addAll(p.fuels)
       addAll(p.sockets)
       p.cuisine?.let { add(it) }
-      if (p.is24h) add("Open 24/7") else if (result.alongRouteM != null) p.openingHours?.let { add(it) }
+      if (p.is24h) add("24/7") else p.openingHours?.let { add(it) }
       if (p.hasShop) add("Shop")
       if (p.hasToilets) add("Toilets")
-      if (p.selfService) add("Unmanned")
-      p.osmCharge?.let { add("Charge: $it") }
-    }
+    }.take(6)
     if (chips.isNotEmpty()) {
-      Spacer(Modifier.height(14.dp))
-      FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Spacer(Modifier.height(12.dp))
+      FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         chips.forEach { Chip(it) }
       }
     }
 
     if (p.category == PlaceCategory.FUEL) {
-      Spacer(Modifier.height(16.dp))
       val prices = result.prices
-      if (prices != null) PriceTable(prices)
-      else if (priceCountry == null) PriceCoverageNote()
-      else Text("No current prices reported for this station.", color = Drivr.textMuted, fontSize = 13.sp)
+      if (prices != null) {
+        Spacer(Modifier.height(12.dp))
+        PriceTable(prices)
+      } else if (priceCountry == null) {
+        Spacer(Modifier.height(10.dp))
+        PriceCoverageNote()
+      }
     }
 
-    Spacer(Modifier.height(18.dp))
+    Spacer(Modifier.height(16.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
       if (navigating) {
         BigButton("Add stop", primary = true, onClick = onAddStop, modifier = Modifier.weight(1f))
-        BigButton("Go here instead", primary = false, onClick = onDrive, modifier = Modifier.weight(1f))
+        BigButton("Go here", primary = false, onClick = onDrive, modifier = Modifier.weight(0.7f))
       } else {
         BigButton("Drive here", primary = true, onClick = onDrive, modifier = Modifier.weight(1f))
       }
     }
-    Spacer(Modifier.height(6.dp))
-    Text(
-        "Data © OpenStreetMap contributors" + (result.prices?.let { " · Prices: ${it.source}" } ?: ""),
-        color = Drivr.inactive,
-        fontSize = 11.sp,
-    )
   }
 }
 
-@Composable
-private fun Stat(label: String, value: String, modifier: Modifier, highlight: Boolean = false) {
-  Column(modifier.clip(RoundedCornerShape(12.dp)).background(Drivr.cardBand).padding(horizontal = 12.dp, vertical = 10.dp)) {
-    Text(label, color = Drivr.textMuted, fontSize = 12.sp, maxLines = 1)
-    Text(value, color = if (highlight) Drivr.ok else Drivr.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+/** "20 km ahead · +1 min" while driving, "2.3 km away · Amersfoort" otherwise. */
+private fun summary(r: PlaceResult, exactDetourS: Double?): String {
+  val along = r.alongRouteM
+  return if (along != null) {
+    val extra = exactDetourS ?: r.detourS
+    listOfNotNull("${formatDistance(along)} ahead", extra?.let { detourText(it, estimate = exactDetourS == null) }, r.place.address)
+        .joinToString(" · ")
+  } else {
+    listOfNotNull("${formatDistance(r.distanceM)} away", r.place.address).joinToString(" · ")
   }
 }
 
@@ -485,20 +507,19 @@ private fun Stat(label: String, value: String, modifier: Modifier, highlight: Bo
 private fun Chip(text: String) {
   Text(
       text,
-      color = Drivr.text,
+      color = Drivr.textMuted,
       fontSize = 13.sp,
-      modifier = Modifier.clip(RoundedCornerShape(8.dp)).border(1.dp, Drivr.inactive, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 5.dp),
+      modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Drivr.cardBand).padding(horizontal = 9.dp, vertical = 4.dp),
   )
 }
 
 @Composable
 private fun PriceTable(prices: FuelPrices) {
-  Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Drivr.cardBand).padding(12.dp)) {
-    Text("Pump prices", color = Drivr.textMuted, fontSize = 12.sp)
-    prices.perLitre.forEach { (fuel, price) ->
-      Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-        Text(fuel, color = Drivr.text, fontSize = 16.sp, modifier = Modifier.weight(1f))
-        Text("${formatPrice(price)} /L", color = Drivr.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    prices.perLitre.entries.take(3).forEach { (fuel, price) ->
+      Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(Drivr.cardBand).padding(horizontal = 10.dp, vertical = 8.dp)) {
+        Text(fuel, color = Drivr.textMuted, fontSize = 12.sp)
+        Text(formatPrice(price), color = Drivr.text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
       }
     }
   }
@@ -511,23 +532,67 @@ private fun BigButton(text: String, primary: Boolean, onClick: () -> Unit, modif
           .clip(RoundedCornerShape(14.dp))
           .background(if (primary) Drivr.accent else Drivr.cardBand)
           .clickable(onClick = onClick)
-          .padding(vertical = 15.dp),
+          .padding(vertical = 14.dp),
       contentAlignment = Alignment.Center,
   ) {
     Text(text, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
   }
 }
 
-/** "Stops" button shown while driving, next to Turns/AR. */
+// ---- Driving controls ---------------------------------------------------------------------------
+
+/**
+ * While driving: two round buttons on the right edge. Search opens stops along the route; the
+ * second opens a small menu with the turn list and AR view, so the map stays clear.
+ */
 @Composable
-fun StopsButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-  Column(
-      modifier.clip(RoundedCornerShape(16.dp)).background(Drivr.card).clickable(onClick = onClick).padding(10.dp),
-      horizontalAlignment = Alignment.CenterHorizontally,
-  ) {
-    PlaceIcon(PlaceCategory.FUEL, size = 30.dp)
-    Spacer(Modifier.height(4.dp))
-    Text("Stops", color = Color.White, fontSize = 12.sp)
+fun DrivingControls(
+    onSearch: () -> Unit,
+    onTurns: () -> Unit,
+    onAr: () -> Unit,
+    arAuto: Boolean,
+    onToggleArAuto: () -> Unit,
+    modifier: Modifier = Modifier,
+    initiallyOpen: Boolean = false,
+) {
+  var open by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(initiallyOpen) }
+  Column(modifier, horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    RoundButton(onSearch) { SearchGlyph(Drivr.text) }
+    RoundButton({ open = !open }) {
+      Canvas(Modifier.size(18.dp)) {
+        listOf(0.2f, 0.5f, 0.8f).forEach { drawCircle(Drivr.text, 2.dp.toPx(), Offset(size.width * it, size.height / 2)) }
+      }
+    }
+    if (open) {
+      Column(Modifier.clip(RoundedCornerShape(16.dp)).background(Drivr.card).padding(vertical = 4.dp)) {
+        MenuItem("Turn list") { open = false; onTurns() }
+        MenuItem("AR view") { open = false; onAr() }
+        MenuItem(if (arAuto) "Auto AR: on" else "Auto AR: off", onToggleArAuto)
+      }
+    }
+  }
+}
+
+@Composable
+private fun RoundButton(onClick: () -> Unit, content: @Composable () -> Unit) {
+  Box(
+      Modifier.size(52.dp).clip(CircleShape).background(Drivr.card).clickable(onClick = onClick),
+      contentAlignment = Alignment.Center,
+  ) { content() }
+}
+
+@Composable
+private fun MenuItem(text: String, onClick: () -> Unit) {
+  Text(text, color = Drivr.text, fontSize = 15.sp,
+      modifier = Modifier.clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 11.dp))
+}
+
+@Composable
+fun SearchGlyph(color: Color, modifier: Modifier = Modifier.size(20.dp)) {
+  Canvas(modifier) {
+    val u = size.width / 24f
+    drawCircle(color, 7f * u, Offset(10f * u, 10f * u), style = Stroke(2.5f * u))
+    drawLine(color, Offset(15.5f * u, 15.5f * u), Offset(21f * u, 21f * u), 2.5f * u, StrokeCap.Round)
   }
 }
 

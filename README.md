@@ -44,7 +44,9 @@ What works today:
   ~300 m before each maneuver (Auto) or by hand. Pose from GPS course + gravity sensor, no ARCore.
 - Turn list with shields, destinations and lane advice ("Use lanes 4 & 5 of 5").
 - Places: search bar and category chips (fuel, charging, food, coffee, groceries, shops, parking,
-  rest stops) from OSM. While driving, **Stops** lists them along the next 100 km in driving
+  rest stops) from OSM. The closest few show within a second or two; while driving the search then
+  adds places along the next 40 km of the route (a few small bounding-box queries, raced over two
+  Overpass mirrors and cached for 10 minutes), in driving
   order with a detour estimate; opening one asks Valhalla for the exact extra time, and **Add
   stop** re-routes via it. Fuel stations show fuel types, hours, shop/toilets; chargers show
   connectors and power.

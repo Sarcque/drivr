@@ -107,6 +107,33 @@ class RouteCorridor(route: List<LatLng>) {
     return dist(xs[i], ys[i], xs[a] + t * dx, ys[a] + t * dy)
   }
 
+  /**
+   * Bounding boxes covering the route from [fromM] to [toM], one per [stepM] of road, each grown
+   * by [padM]. A handful of small boxes is far cheaper for Overpass than one long `around` line.
+   */
+  fun boxes(fromM: Double, toM: Double, stepM: Double = 10_000.0, padM: Double = 1500.0): List<BBox> {
+    val end = minOf(toM, lengthM)
+    val out = ArrayList<BBox>()
+    var start = fromM
+    while (start < end) {
+      val stop = minOf(start + stepM, end)
+      var s = Double.MAX_VALUE; var w = Double.MAX_VALUE; var n = -Double.MAX_VALUE; var e = -Double.MAX_VALUE
+      for (i in pts.indices) {
+        val inside = cum[i] in start..stop ||
+            (i > 0 && cum[i - 1] < start && cum[i] > start) || (i > 0 && cum[i - 1] < stop && cum[i] > stop)
+        if (!inside) continue
+        s = minOf(s, pts[i].lat); n = maxOf(n, pts[i].lat); w = minOf(w, pts[i].lon); e = maxOf(e, pts[i].lon)
+      }
+      if (s <= n) {
+        val dLat = padM / 110_574.0
+        val dLon = padM / mx
+        out += BBox(s - dLat, w - dLon, n + dLat, e + dLon)
+      }
+      start = stop
+    }
+    return out
+  }
+
   /** Bearing of the route (degrees from north) at [alongM]. */
   fun bearingAt(alongM: Double): Double {
     var i = cum.indexOfFirst { it >= alongM }.coerceIn(1, pts.size - 1)

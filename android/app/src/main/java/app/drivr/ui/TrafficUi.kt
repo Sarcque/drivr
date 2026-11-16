@@ -70,7 +70,7 @@ fun TrafficLayers(events: List<TrafficEvent>) {
   LineLayer(
       id = "drivr-traffic-closures",
       source = closures,
-      minZoom = 13f,
+      minZoom = 14f,
       color = const(TrafficColors.closure),
       width = interpolate(exponential(1.5f), zoom(), 13 to const(3.dp), 18 to const(10.dp)),
       dasharray = const(listOf(1, 1)),
@@ -91,7 +91,7 @@ fun TrafficLayers(events: List<TrafficEvent>) {
   CircleLayer(
       id = "drivr-traffic-points",
       source = points,
-      minZoom = 8f,
+      minZoom = 10f,
       color = org.maplibre.compose.expressions.dsl.feature["color"].cast(),
       radius = interpolate(exponential(1.5f), zoom(), 8 to const(5.dp), 16 to const(13.dp)),
       strokeColor = const(Color.White),
