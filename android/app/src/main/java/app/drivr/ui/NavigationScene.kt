@@ -28,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import app.drivr.ar.ArJunctionView
+import com.stadiamaps.ferrostar.maplibreui.routeline.RouteOverlayBuilder
 import com.stadiamaps.ferrostar.core.NavigationUiState
 import com.stadiamaps.ferrostar.core.measurement.MeasurementSpeedUnit
 import com.stadiamaps.ferrostar.maplibreui.NavigationMapPuckStyle
@@ -38,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,7 +51,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.core.content.ContextCompat
-import app.drivr.BuildConfig
 import app.drivr.DrivrViewModel
 import app.drivr.RouteStatus
 import com.stadiamaps.ferrostar.composeui.config.NavigationViewComponentBuilder
@@ -80,6 +81,15 @@ fun drivingCameraOptions(): NavigationCameraOptions {
   )
 }
 
+/** Drivr's own map style (style/drivr-style.json in the repo), on free OpenFreeMap tiles. */
+@Composable
+fun rememberDrivrStyle(): BaseStyle {
+  val context = LocalContext.current
+  return remember {
+    BaseStyle.Json(context.assets.open("drivr-style.json").bufferedReader().use { it.readText() })
+  }
+}
+
 @Composable
 fun NavigationScene(viewModel: DrivrViewModel) {
   KeepScreenOnDisposableEffect()
@@ -98,7 +108,8 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   Box(Modifier.fillMaxSize()) {
   DynamicallyOrientingNavigationView(
       modifier = Modifier.fillMaxSize(),
-      baseStyle = BaseStyle.Uri(BuildConfig.MAP_STYLE_URL),
+      baseStyle = rememberDrivrStyle(),
+      routeOverlayBuilder = RouteOverlayBuilder(navigationPath = { DrivrRouteLine(it) }),
       navigationMapState = mapState,
       navigationCameraOptions = drivingCameraOptions(),
       viewModel = viewModel,

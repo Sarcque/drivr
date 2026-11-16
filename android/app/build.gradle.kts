@@ -19,9 +19,6 @@ android {
         // Routing: public FOSSGIS Valhalla (fair use, no SLA). Point this at your own
         // Valhalla instance (docker run ghcr.io/valhalla/valhalla) for real use.
         buildConfigField("String", "VALHALLA_URL", "\"https://valhalla1.openstreetmap.de/route\"")
-        // Base map: OpenFreeMap (free, no key, OSM data). To be replaced by Drivr's own
-        // lane-level PMTiles + style.
-        buildConfigField("String", "MAP_STYLE_URL", "\"https://tiles.openfreemap.org/styles/liberty\"")
     }
 
     buildTypes {
@@ -39,6 +36,13 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    // The map style lives at the repo root so web, Android and iOS share one file.
+    sourceSets {
+        getByName("main") { assets.directories.add("../../style") }
+    }
+    androidResources {
+        ignoreAssetsPattern = "!*.py"
     }
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
