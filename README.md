@@ -65,7 +65,8 @@ cd android
 ./gradlew recordPaparazziDebug     # re-record screenshots after UI changes
 ```
 
-CI builds the APK on every push; download it from the run's artifacts.
+CI builds the APK on every push. The latest build of main is always at
+[releases/download/latest/drivr.apk](https://github.com/Sarcque/drivr/releases/download/latest/drivr.apk).
 
 ### Known limits
 
