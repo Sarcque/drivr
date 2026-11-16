@@ -82,6 +82,7 @@ class DrivrViewModel(
     private val traffic: TrafficRepository = AppModule.traffic,
     private val placesRepo: PlacesRepository = AppModule.places,
     private val cameraClient: SpeedCameraClient = AppModule.speedCameras,
+    private val settingsStore: app.drivr.settings.SettingsStore = AppModule.settings,
 ) : DefaultNavigationViewModel(core, valhallaExtendedOSRMAnnotationPublisher()) {
 
   private val hasLocationPermission = MutableStateFlow(false)
@@ -109,6 +110,17 @@ class DrivrViewModel(
           .flowOn(Dispatchers.Default)
           .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+  val settings: StateFlow<app.drivr.settings.Settings> = settingsStore.state
+
+  fun updateSettings(change: (app.drivr.settings.Settings) -> app.drivr.settings.Settings) {
+    settingsStore.update(change)
+    applyVoice()
+  }
+
+  private fun applyVoice() {
+    core.spokenInstructionObserver?.setMuted(!settingsStore.state.value.voice)
+  }
+
   /** Fixed speed cameras and average-speed sections on the current route (OSM). */
   private val cameras = MutableStateFlow<List<SpeedCamera>>(emptyList())
   val cameraList: StateFlow<List<SpeedCamera>> = cameras.asStateFlow()
@@ -116,8 +128,8 @@ class DrivrViewModel(
 
   /** Cameras on the route ahead, nearest first, and the average speed inside a section. */
   val camerasAhead: StateFlow<Pair<List<CameraAhead>, Double?>> =
-      combine(super.navigationUiState, cameras) { ui, cams ->
-            val route = if (ui.isNavigating() && cams.isNotEmpty()) remainingGeometry(ui) else null
+      combine(super.navigationUiState, cameras, settingsStore.state) { ui, cams, st ->
+            val route = if (ui.isNavigating() && cams.isNotEmpty() && st.speedCameras) remainingGeometry(ui) else null
             val ahead =
                 if (route == null) emptyList()
                 else SpeedCameraClient.ahead(route.map { LatLng(it.lat, it.lng) }, cams)
@@ -199,6 +211,7 @@ class DrivrViewModel(
         if (simulate) locationProvider.enableSimulationOn(route)
         else locationProvider.disableSimulation()
         core.startNavigation(route = route)
+        applyVoice()
         destination = dest
         destinationName = name
         simulating = simulate
@@ -343,8 +356,7 @@ class DrivrViewModel(
       Waypoint(coordinate = GeographicCoordinate(lat, lon), kind = WaypointKind.BREAK)
 
   override fun toggleMute() {
-    val observer = core.spokenInstructionObserver ?: return
-    observer.setMuted(!observer.isMuted)
+    updateSettings { it.copy(voice = !it.voice) }
   }
 
   override fun stopNavigation() {

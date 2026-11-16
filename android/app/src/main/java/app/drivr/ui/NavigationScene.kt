@@ -34,6 +34,7 @@ import com.stadiamaps.ferrostar.core.NavigationUiState
 import com.stadiamaps.ferrostar.core.measurement.MeasurementSpeedUnit
 import com.stadiamaps.ferrostar.maplibreui.NavigationMapPuckStyle
 import com.stadiamaps.ferrostar.composeui.config.withProgressView
+import com.stadiamaps.ferrostar.composeui.config.VisualNavigationViewConfig
 import kotlin.math.roundToInt
 import uniffi.ferrostar.VisualInstructionContent
 import androidx.compose.runtime.Composable
@@ -84,11 +85,25 @@ fun drivingCameraOptions(): NavigationCameraOptions {
 
 /** Drivr's own map style (style/drivr-style.json in the repo), on free OpenFreeMap tiles. */
 @Composable
-fun rememberDrivrStyle(): BaseStyle {
+fun rememberDrivrStyle(buildings3d: Boolean = true): BaseStyle {
   val context = LocalContext.current
-  return remember {
-    BaseStyle.Json(context.assets.open("drivr-style.json").bufferedReader().use { it.readText() })
+  return remember(buildings3d) {
+    val json = context.assets.open("drivr-style.json").bufferedReader().use { it.readText() }
+    BaseStyle.Json(if (buildings3d) json else withoutLayer(json, "building-3d"))
   }
+}
+
+/** The style JSON without one layer (e.g. 3D buildings). */
+internal fun withoutLayer(styleJson: String, id: String): String {
+  val style = org.json.JSONObject(styleJson)
+  val layers = style.getJSONArray("layers")
+  val kept = org.json.JSONArray()
+  for (i in 0 until layers.length()) {
+    val l = layers.getJSONObject(i)
+    if (l.optString("id") != id) kept.put(l)
+  }
+  style.put("layers", kept)
+  return style.toString()
 }
 
 @Composable
@@ -109,24 +124,33 @@ fun NavigationScene(viewModel: DrivrViewModel) {
     if (places.selected != null) viewModel.selectPlace(null) else viewModel.closePlaces()
   }
 
-  // AR junction view: opens by hand, or automatically ~300 m before each maneuver when Auto is on.
+  val settings by viewModel.settings.collectAsState()
+  var showSettings by rememberSaveable { mutableStateOf(false) }
+  androidx.activity.compose.BackHandler(enabled = showSettings) { showSettings = false }
+
+  // AR junction view: off unless enabled in Settings. Opens by hand, or ~300 m before each
+  // maneuver when "Open AR before turns" is on.
   var arManual by rememberSaveable { mutableStateOf(false) }
-  var arAuto by rememberSaveable { mutableStateOf(true) }
+  // Closing AR while it opened by itself keeps it closed for the rest of this trip.
+  var arSnoozed by rememberSaveable { mutableStateOf(false) }
+  LaunchedEffect(uiState.isNavigating()) { if (!uiState.isNavigating()) arSnoozed = false }
   val nearManeuver = (uiState.progress?.distanceToNextManeuver ?: Double.MAX_VALUE) < 300.0
-  val showAr = uiState.isNavigating() && (arManual || (arAuto && nearManeuver))
+  val showAr = settings.arEnabled && uiState.isNavigating() && (arManual || (settings.arAuto && !arSnoozed && nearManeuver))
 
   Box(Modifier.fillMaxSize()) {
   DynamicallyOrientingNavigationView(
       modifier = Modifier.fillMaxSize(),
-      baseStyle = rememberDrivrStyle(),
+      baseStyle = rememberDrivrStyle(buildings3d = settings.buildings3d),
+      // Mute and zoom live in Settings / gestures; only Ferrostar's recenter button stays.
+      config = VisualNavigationViewConfig(showMute = false, showZoom = false),
       routeOverlayBuilder = RouteOverlayBuilder(navigationPath = { DrivrRouteLine(it) }),
       navigationMapState = mapState,
       navigationCameraOptions = drivingCameraOptions(),
       viewModel = viewModel,
       showDefaultPuck = false,
       mapContent = { state ->
-        TrafficLayers(trafficEvents)
-        CamerasLayer(cameraList)
+        if (settings.trafficOnMap) TrafficLayers(trafficEvents)
+        if (settings.speedCameras) CamerasLayer(cameraList)
         PlacesLayer(
             results = places.selected?.let { listOf(it) } ?: places.results,
             selectedId = places.selected?.place?.id,
@@ -150,7 +174,9 @@ fun NavigationScene(viewModel: DrivrViewModel) {
                   // Valhalla's ETA has no live traffic; add NDW's reported delays on the route.
                   val delayS = trafficAhead.sumOf { it.event.delaySeconds ?: 0.0 }
                   Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    DrivingAlert(camerasAhead.first, camerasAhead.second, trafficAhead)
+                    DrivingAlert(
+                        camerasAhead.first, camerasAhead.second,
+                        if (settings.trafficAlerts) trafficAhead else emptyList())
                     TripCards(
                         speedLimitKmh = state.speedLimitKmh(),
                         speedKmh = state.location?.speed?.value?.let { (it * 3.6).roundToInt() },
@@ -186,17 +212,22 @@ fun NavigationScene(viewModel: DrivrViewModel) {
     DrivingControls(
         onSearch = viewModel::openPlaces,
         onTurns = { showTurns = !showTurns },
-        onAr = { arManual = true },
-        arAuto = arAuto,
-        onToggleArAuto = { arAuto = !arAuto },
-        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
+        onAr = if (settings.arEnabled) ({ arManual = true }) else null,
+        onSettings = { showSettings = true },
+        modifier = Modifier.align(Alignment.CenterStart).padding(start = 12.dp),
     )
   }
 
   // Search bar and categories while browsing; the places sheet or a place's details when open.
   if (!uiState.isNavigating()) {
     Column(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)) {
-      PlacesSearchBar(places.query, viewModel::searchText, onFocus = viewModel::openPlaces)
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        PlacesSearchBar(places.query, viewModel::searchText, onFocus = viewModel::openPlaces, modifier = Modifier.weight(1f))
+        if (!places.open) {
+          Spacer(Modifier.width(8.dp))
+          SettingsButton(onClick = { showSettings = true })
+        }
+      }
       if (!places.open) {
         Spacer(Modifier.height(10.dp))
         CategoryChips(null, viewModel::searchCategory)
@@ -237,12 +268,15 @@ fun NavigationScene(viewModel: DrivrViewModel) {
         modifier = Modifier.align(Alignment.Center).padding(horizontal = 16.dp),
     )
   }
+  if (showSettings) {
+    SettingsScreen(settings, viewModel::updateSettings, onClose = { showSettings = false })
+  }
   if (showAr) {
     ArJunctionView(
         ui = uiState,
         onClose = {
           arManual = false
-          arAuto = false
+          arSnoozed = true
         },
     )
   }

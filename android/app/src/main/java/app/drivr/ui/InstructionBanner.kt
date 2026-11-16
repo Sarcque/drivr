@@ -144,7 +144,7 @@ fun actionPhrase(type: ManeuverType?, modifier: ManeuverModifier?): String? {
 }
 
 fun formatDistance(meters: Double): String =
-    when {
+    if (app.drivr.settings.DisplayUnits.imperial) formatImperial(meters) else when {
       meters >= 10_000 -> "${(meters / 1000).roundToInt()} km"
       meters >= 1_000 -> String.format(Locale.ROOT, "%.1f km", meters / 1000)
       meters >= 100 -> "${(meters / 50).roundToInt() * 50} m"
@@ -184,4 +184,14 @@ private fun InstructionBannerPreview() {
       ),
       distanceToManeuverMeters = 750.0,
   )
+}
+
+/** Miles above ~0.1 mi, feet below, rounded like road signs. */
+fun formatImperial(meters: Double): String {
+  val miles = meters / 1609.344
+  return when {
+    miles >= 10 -> "${miles.roundToInt()} mi"
+    miles >= 0.1 -> String.format(Locale.ROOT, "%.1f mi", miles)
+    else -> "${((meters * 3.28084) / 50).roundToInt() * 50} ft"
+  }
 }
