@@ -10,6 +10,7 @@ lifecycle = "2.10.0"
 okhttp = "5.3.2"
 desugar = "2.1.5"
 junit = "4.13.2"
+camerax = "1.6.2"
 paparazzi = "2.0.0-alpha04"
 
 [libraries]
@@ -30,6 +31,9 @@ maplibre-compose = { module = "org.maplibre.compose:maplibre-compose-android", v
 okhttp-bom = { module = "com.squareup.okhttp3:okhttp-bom", version.ref = "okhttp" }
 okhttp = { module = "com.squareup.okhttp3:okhttp" }
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugar" }
+camerax-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+camerax-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+camerax-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 junit = { module = "junit:junit", version.ref = "junit" }
 
 [plugins]

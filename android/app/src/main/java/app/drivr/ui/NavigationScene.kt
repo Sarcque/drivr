@@ -22,6 +22,18 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import app.drivr.ar.ArJunctionView
+import com.stadiamaps.ferrostar.core.NavigationUiState
+import com.stadiamaps.ferrostar.core.measurement.MeasurementSpeedUnit
+import com.stadiamaps.ferrostar.maplibreui.NavigationMapPuckStyle
+import com.stadiamaps.ferrostar.composeui.config.withProgressView
+import kotlin.math.roundToInt
+import uniffi.ferrostar.VisualInstructionContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -77,12 +89,28 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   val routeStatus by viewModel.routeStatus.collectAsState()
   val mapState = rememberNavigationMapState()
 
+  // AR junction view: opens by hand, or automatically ~300 m before each maneuver when Auto is on.
+  var arManual by rememberSaveable { mutableStateOf(false) }
+  var arAuto by rememberSaveable { mutableStateOf(true) }
+  val nearManeuver = (uiState.progress?.distanceToNextManeuver ?: Double.MAX_VALUE) < 300.0
+  val showAr = uiState.isNavigating() && (arManual || (arAuto && nearManeuver))
+
+  Box(Modifier.fillMaxSize()) {
   DynamicallyOrientingNavigationView(
       modifier = Modifier.fillMaxSize(),
       baseStyle = BaseStyle.Uri(BuildConfig.MAP_STYLE_URL),
       navigationMapState = mapState,
       navigationCameraOptions = drivingCameraOptions(),
       viewModel = viewModel,
+      locationPuckStyle =
+          NavigationMapPuckStyle(
+              dotFillColorCurrentLocation = Drivr.accent,
+              dotFillColorOldLocation = Drivr.accent,
+              accuracyStrokeColor = Color.Transparent,
+              accuracyFillColor = Drivr.accent.copy(alpha = 0.12f),
+              bearingColor = Drivr.accent,
+              dotRadius = 9.dp,
+          ),
       views =
           NavigationViewComponentBuilder.Default()
               .withInstructionsView { modifier, state ->
@@ -90,6 +118,19 @@ fun NavigationScene(viewModel: DrivrViewModel) {
                   InstructionBanner(
                       instruction = it,
                       distanceToManeuverMeters = state.progress?.distanceToNextManeuver,
+                      modifier = modifier,
+                      then = state.nextManeuver(),
+                  )
+                }
+              }
+              .withProgressView { modifier, state, onExit ->
+                state.progress?.let { progress ->
+                  TripCards(
+                      speedLimitKmh = state.speedLimitKmh(),
+                      speedKmh = state.location?.speed?.value?.let { (it * 3.6).roundToInt() },
+                      distanceRemainingM = progress.distanceRemaining,
+                      durationRemainingS = progress.durationRemaining,
+                      onEnd = onExit,
                       modifier = modifier,
                   )
                 }
@@ -113,6 +154,63 @@ fun NavigationScene(viewModel: DrivrViewModel) {
               ornamentOptions = OrnamentOptions(isCompassEnabled = false, isScaleBarEnabled = false)
           ),
   )
+
+  if (uiState.isNavigating() && !showAr) {
+    ArToggle(
+        auto = arAuto,
+        onOpen = { arManual = true },
+        onToggleAuto = { arAuto = !arAuto },
+        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
+    )
+  }
+  if (showAr) {
+    ArJunctionView(
+        ui = uiState,
+        onClose = {
+          arManual = false
+          arAuto = false
+        },
+    )
+  }
+  }
+}
+
+/** The maneuver after the current one, for the "Then" row. */
+private fun NavigationUiState.nextManeuver(): VisualInstructionContent? =
+    remainingSteps?.getOrNull(1)?.visualInstructions?.firstOrNull()?.primaryContent
+
+private fun NavigationUiState.speedLimitKmh(): Int? {
+  val limit = currentAnnotation?.speedLimit ?: return null
+  return when (limit.unit) {
+    MeasurementSpeedUnit.KilometersPerHour -> limit.value.roundToInt()
+    MeasurementSpeedUnit.MilesPerHour -> (limit.value * 1.609344).roundToInt()
+    else -> null
+  }
+}
+
+@Composable
+private fun ArToggle(
+    auto: Boolean,
+    onOpen: () -> Unit,
+    onToggleAuto: () -> Unit,
+    modifier: Modifier,
+) {
+  Column(
+      modifier
+          .clip(RoundedCornerShape(16.dp))
+          .background(Drivr.card)
+          .padding(6.dp),
+      horizontalAlignment = Alignment.CenterHorizontally,
+  ) {
+    TextButton(onClick = onOpen) { Text("AR", color = Color.White, fontWeight = FontWeight.Bold) }
+    TextButton(onClick = onToggleAuto) {
+      Text(
+          if (auto) "Auto\non" else "Auto\noff",
+          color = if (auto) Drivr.accent else Drivr.textMuted,
+          fontSize = 11.sp,
+      )
+    }
+  }
 }
 
 @Composable
@@ -124,7 +222,7 @@ private fun StartPanel(status: RouteStatus, onDemoDrive: () -> Unit, modifier: M
               .padding(16.dp)
               .fillMaxWidth()
               .clip(RoundedCornerShape(20.dp))
-              .background(Color(0xF2161A1F))
+              .background(Drivr.card)
               .padding(20.dp)
   ) {
     Text("Drivr", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -132,7 +230,7 @@ private fun StartPanel(status: RouteStatus, onDemoDrive: () -> Unit, modifier: M
     Text(
         "Long-press the map to drive there, or take the test drive through Knooppunt " +
             "Rijnsweerd (Utrecht) with simulated GPS.",
-        color = Color(0xFFB8C0C8),
+        color = Drivr.textMuted,
         fontSize = 14.sp,
     )
     Spacer(Modifier.height(14.dp))
@@ -140,7 +238,7 @@ private fun StartPanel(status: RouteStatus, onDemoDrive: () -> Unit, modifier: M
       Button(
           onClick = onDemoDrive,
           enabled = status !is RouteStatus.Loading,
-          colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2F8CFF)),
+          colors = ButtonDefaults.buttonColors(containerColor = Drivr.accent),
       ) {
         Text("Start test drive")
       }

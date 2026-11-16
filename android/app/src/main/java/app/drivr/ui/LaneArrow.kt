@@ -40,7 +40,6 @@ fun DrawScope.drawLaneArrow(angleDeg: Float, color: Color, strokeWidth: Float) {
   val h = size.height
   val cx = w / 2f
   val bottom = Offset(cx, h * 0.94f)
-  val bend = Offset(cx, h * 0.52f)
   val headLen = strokeWidth * 2.1f
   val stroke = Stroke(strokeWidth, cap = StrokeCap.Butt, join = StrokeJoin.Round)
 
@@ -61,21 +60,29 @@ fun DrawScope.drawLaneArrow(angleDeg: Float, color: Color, strokeWidth: Float) {
     return
   }
 
-  val rad = Math.toRadians(angleDeg.toDouble())
-  // Direction of the tip in screen coordinates (up is -y).
-  val dx = sin(rad).toFloat()
-  val dy = -cos(rad).toFloat()
-
-  val reach = if (angleDeg == 0f) h * 0.44f else w * 0.34f
-  val tip = Offset(bend.x + dx * reach, bend.y + dy * reach)
-  path.lineTo(bend.x, bend.y)
   if (angleDeg == 0f) {
-    path.lineTo(tip.x, tip.y + headLen * 0.6f)
-  } else {
-    val ctrl = Offset(bend.x, bend.y - reach * 0.55f)
-    val stop = Offset(tip.x - dx * headLen * 0.6f, tip.y - dy * headLen * 0.6f)
-    path.quadraticTo(ctrl.x, ctrl.y, stop.x, stop.y)
+    val tip = Offset(cx, h * 0.06f)
+    path.lineTo(cx, tip.y + headLen * 0.6f)
+    drawPath(path, color, style = stroke)
+    drawHead(tip, 0f, -1f, headLen, strokeWidth, color)
+    return
   }
+
+  // Turns: stem, then one smooth curve into the turn; the head follows the curve's end tangent.
+  val rad = Math.toRadians(angleDeg.toDouble())
+  val sx = sin(rad).toFloat()
+  val cy = cos(rad).toFloat()
+  val bendY = h * 0.62f
+  val ctrl = Offset(cx, h * 0.16f)
+  val tip = Offset(cx + sx * w * 0.36f, h * 0.18f + (1f - cy) * h * 0.14f)
+  val tx = tip.x - ctrl.x
+  val ty = tip.y - ctrl.y
+  val tl = kotlin.math.hypot(tx, ty).takeIf { it > 1e-3f } ?: 1f
+  val dx = tx / tl
+  val dy = ty / tl
+  val stop = Offset(tip.x - dx * headLen * 0.6f, tip.y - dy * headLen * 0.6f)
+  path.lineTo(cx, bendY)
+  path.quadraticTo(ctrl.x, ctrl.y, stop.x, stop.y)
   drawPath(path, color, style = stroke)
   drawHead(tip, dx, dy, headLen, strokeWidth, color)
 }

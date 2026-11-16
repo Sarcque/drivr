@@ -47,7 +47,7 @@ class InstructionBannerScreenshotTest {
 
   private val a28OnRamp =
       banner(
-          "Rijksweg 28",
+          "A28: Amersfoort, Utrecht-Science Park",
           ManeuverType.TURN,
           ManeuverModifier.RIGHT,
           listOf(
@@ -98,14 +98,24 @@ class InstructionBannerScreenshotTest {
 
   @Composable
   private fun Frame(content: @Composable () -> Unit) {
-    Column(Modifier.background(Color(0xFF55606B)).padding(16.dp)) { content() }
+    Column(Modifier.background(Drivr.sky).padding(16.dp)) { content() }
   }
+
+  private val thenKeepLeft =
+      VisualInstructionContent(
+          "A28: Groningen, Amersfoort",
+          ManeuverType.FORK,
+          ManeuverModifier.SLIGHT_LEFT,
+          null,
+          null,
+          emptyList(),
+      )
 
   @Test
   fun lane_banners_from_real_route() {
     paparazzi.snapshot {
       Frame {
-        InstructionBanner(a28OnRamp, 400.0)
+        InstructionBanner(a28OnRamp, 400.0, then = thenKeepLeft)
         Spacer(Modifier.height(16.dp))
         InstructionBanner(rijnsweerd, 1200.0)
         Spacer(Modifier.height(16.dp))
@@ -114,6 +124,38 @@ class InstructionBannerScreenshotTest {
         InstructionBanner(dodeweg, 80.0)
       }
     }
+  }
+
+  @Test
+  fun trip_cards() {
+    paparazzi.snapshot {
+      Frame {
+        TripCards(
+            speedLimitKmh = 100,
+            speedKmh = 98,
+            distanceRemainingM = 18_400.0,
+            durationRemainingS = 840.0,
+            onEnd = {},
+            now = java.time.LocalTime.of(9, 12),
+        )
+      }
+    }
+  }
+
+  @Test
+  fun sign_text_splits_route_numbers_from_destinations() {
+    assertEquals(SignText(listOf("A27", "E30"), "Breda · Rotterdam"), parseSignText("A27/E30: Breda, Rotterdam"))
+    assertEquals(SignText(listOf("A10", "S111"), "RING · Utrecht · Rotterdam"), parseSignText("RING A10, S111: Utrecht, Rotterdam"))
+    assertEquals(SignText(emptyList(), "Waterlooplein"), parseSignText("Waterlooplein"))
+  }
+
+  @Test
+  fun lane_hints() {
+    val s = LaneInfo(false, listOf("straight"), null)
+    val r = LaneInfo(true, listOf("right"), "right")
+    assertEquals("Use the right 2 lanes", laneHint(listOf(s, s, s, r, r)))
+    assertEquals("Use the left lane", laneHint(listOf(r, s)))
+    assertEquals(null, laneHint(listOf(r, r)))
   }
 
   @Test

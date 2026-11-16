@@ -65,6 +65,11 @@ dependencies {
     implementation(libs.ferrostar.ui.maplibre)
     implementation(libs.maplibre.compose)
 
+    // AR junction view: plain CameraX (Apache-2.0), no ARCore / Play Services.
+    implementation(libs.camerax.camera2)
+    implementation(libs.camerax.lifecycle)
+    implementation(libs.camerax.view)
+
     implementation(platform(libs.okhttp.bom))
     implementation(libs.okhttp)
 
