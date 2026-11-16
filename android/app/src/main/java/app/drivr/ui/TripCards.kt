@@ -101,8 +101,10 @@ private fun SpeedCard(limitKmh: Int?, speedKmh: Int?) {
       Spacer(Modifier.width(12.dp))
     }
     Column {
-      Text("${speedKmh ?: "–"}", color = Drivr.text, fontSize = 28.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp)
-      Text("km/h", color = Drivr.textMuted, fontSize = 12.sp)
+      val mph = app.drivr.settings.DisplayUnits.imperial
+      val shown = speedKmh?.let { if (mph) (it / 1.609344).roundToInt() else it }
+      Text("${shown ?: "–"}", color = Drivr.text, fontSize = 28.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp)
+      Text(if (mph) "mph" else "km/h", color = Drivr.textMuted, fontSize = 12.sp)
     }
     Spacer(Modifier.height(0.dp))
   }

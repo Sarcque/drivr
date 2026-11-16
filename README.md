@@ -40,7 +40,9 @@ What works today:
 - Live traffic (Netherlands): accidents, jams, broken-down vehicles and closures from NDW, refreshed
   every 3 minutes. Shown on the map (jams turn the route red), a "Traffic jam in 4.2 km" card for
   the next event on your side of the road, and reported delays added to the arrival time.
-- AR junction view: camera with route ribbon, upright turn arrows and the direction sign. Opens
+- Settings (gear on the start screen, or ⋯ while driving): voice, AR, speed cameras, traffic,
+  3D buildings, km or miles. AR is off by default.
+- AR junction view (enable in Settings): camera with route ribbon, upright turn arrows and the direction sign. Opens
   ~300 m before each maneuver (Auto) or by hand. Pose from GPS course + gravity sensor, no ARCore.
 - Turn list with shields, destinations and lane advice ("Use lanes 4 & 5 of 5").
 - Places: search bar and category chips (fuel, charging, food, coffee, groceries, shops, parking,

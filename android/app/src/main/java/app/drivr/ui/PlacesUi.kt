@@ -542,21 +542,21 @@ private fun BigButton(text: String, primary: Boolean, onClick: () -> Unit, modif
 // ---- Driving controls ---------------------------------------------------------------------------
 
 /**
- * While driving: two round buttons on the right edge. Search opens stops along the route; the
- * second opens a small menu with the turn list and AR view, so the map stays clear.
+ * While driving: two round buttons on the left edge (Ferrostar's own recenter button lives on the
+ * right, so they never overlap). Search opens stops along the route; the second opens a small
+ * menu with the turn list, AR view (when enabled in settings) and Settings.
  */
 @Composable
 fun DrivingControls(
     onSearch: () -> Unit,
     onTurns: () -> Unit,
-    onAr: () -> Unit,
-    arAuto: Boolean,
-    onToggleArAuto: () -> Unit,
+    onAr: (() -> Unit)?,
+    onSettings: () -> Unit,
     modifier: Modifier = Modifier,
     initiallyOpen: Boolean = false,
 ) {
   var open by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(initiallyOpen) }
-  Column(modifier, horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+  Column(modifier, horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(10.dp)) {
     RoundButton(onSearch) { SearchGlyph(Drivr.text) }
     RoundButton({ open = !open }) {
       Canvas(Modifier.size(18.dp)) {
@@ -566,8 +566,8 @@ fun DrivingControls(
     if (open) {
       Column(Modifier.clip(RoundedCornerShape(16.dp)).background(Drivr.card).padding(vertical = 4.dp)) {
         MenuItem("Turn list") { open = false; onTurns() }
-        MenuItem("AR view") { open = false; onAr() }
-        MenuItem(if (arAuto) "Auto AR: on" else "Auto AR: off", onToggleArAuto)
+        if (onAr != null) MenuItem("AR view") { open = false; onAr() }
+        MenuItem("Settings") { open = false; onSettings() }
       }
     }
   }

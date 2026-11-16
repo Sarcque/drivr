@@ -108,5 +108,7 @@ object AppModule {
     )
   }
 
+  val settings: app.drivr.settings.SettingsStore by lazy { app.drivr.settings.SettingsStore(appContext) }
+
   val ttsObserver: AndroidTtsObserver by lazy { AndroidTtsObserver(appContext) }
 }

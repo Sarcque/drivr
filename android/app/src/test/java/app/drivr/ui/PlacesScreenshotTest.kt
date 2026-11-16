@@ -209,7 +209,7 @@ class PlacesScreenshotTest {
   fun driving_controls_menu_open() {
     paparazzi.snapshot {
       Screen("bg_detail.png") {
-        DrivingControls({}, {}, {}, arAuto = true, onToggleArAuto = {}, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp), initiallyOpen = true)
+        DrivingControls({}, {}, {}, {}, modifier = Modifier.align(Alignment.CenterStart).padding(start = 12.dp), initiallyOpen = true)
       }
     }
   }
