@@ -79,4 +79,5 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kxml2) // XmlPullParser for the NDW parser tests
+    testImplementation(libs.orgjson) // real org.json for the Overpass/Photon parser tests
 }

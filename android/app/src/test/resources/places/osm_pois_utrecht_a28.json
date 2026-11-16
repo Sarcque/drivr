@@ -1,0 +1,559 @@
+{
+"fuel": [
+{
+"name": "Esso",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.102518,
+"lon": 5.146934
+},
+{
+"name": "TotalEnergies Express Sandwyck",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.100083,
+"lon": 5.164706
+},
+{
+"name": "Esso Express De Bilt",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.100264,
+"lon": 5.163832
+},
+{
+"name": "Plekkepoel",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.122835,
+"lon": 5.281967
+},
+{
+"name": "Fieten Olie",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.120345,
+"lon": 5.282879
+},
+{
+"name": "OK express",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.123615,
+"lon": 5.287369
+},
+{
+"name": "OK",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.076479,
+"lon": 5.072937
+},
+{
+"name": "Esso",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.081458,
+"lon": 5.090827
+},
+{
+"name": "Shell Express",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.083518,
+"lon": 5.096428
+},
+{
+"name": "Esso express Tamboersdijk",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.078362,
+"lon": 5.141543
+},
+{
+"name": "Esso Express",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.107016,
+"lon": 5.237356
+},
+{
+"name": "TotalEnergies",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.094003,
+"lon": 5.242925
+},
+{
+"name": "Shell",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.103863,
+"lon": 5.260547
+},
+{
+"name": "Shell Amersfoortseweg",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.11485,
+"lon": 5.263433
+},
+{
+"name": "Esso Isselt",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.164696,
+"lon": 5.36114
+},
+{
+"name": "Tamoil",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.168194,
+"lon": 5.366607
+},
+{
+"name": "Tango Amersfoort Zwaaikom",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.166259,
+"lon": 5.369777
+},
+{
+"name": "Shell",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.160589,
+"lon": 5.376397
+},
+{
+"name": "Tango",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.162949,
+"lon": 5.374621
+},
+{
+"name": "TinQ",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.167401,
+"lon": 5.378811
+},
+{
+"name": "Esso",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.126645,
+"lon": 5.36496
+},
+{
+"name": "Esso",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.068813,
+"lon": 5.105574
+},
+{
+"name": "Haan Kanaleneiland",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.066703,
+"lon": 5.109624
+},
+{
+"name": "Esso",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.075197,
+"lon": 5.122333
+},
+{
+"name": "OK express",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.162436,
+"lon": 5.422638
+},
+{
+"name": "Fountain Fuel waterstofstation",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.163712,
+"lon": 5.423759
+},
+{
+"name": "Tango",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.124587,
+"lon": 5.412043
+},
+{
+"name": "TinQ",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.145999,
+"lon": 5.383167
+},
+{
+"name": "Tango Amersfoort Randwijcklaan",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.160392,
+"lon": 5.398053
+},
+{
+"name": "Esso",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.156736,
+"lon": 5.399582
+},
+{
+"name": "Shell Express",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.156877,
+"lon": 5.40095
+},
+{
+"name": "Tango",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.121833,
+"lon": 5.18773
+},
+{
+"name": "TinQ",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.088281,
+"lon": 5.210518
+},
+{
+"name": "Kwikstaart fuels&more",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.088294,
+"lon": 5.210191
+},
+{
+"name": "Berkman",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.085819,
+"lon": 5.215834
+},
+{
+"name": "Shell",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.086234,
+"lon": 5.232791
+},
+{
+"name": "Esso",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.100083,
+"lon": 5.085962
+},
+{
+"name": "BP",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.098409,
+"lon": 5.086681
+},
+{
+"name": "Shell Station Pieter Nieuwland",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.103497,
+"lon": 5.129478
+},
+{
+"name": "OK",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.064876,
+"lon": 5.129655
+},
+{
+"name": "Stam Tankstations",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.145838,
+"lon": 5.37623
+},
+{
+"name": "TotalEnergies",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.143174,
+"lon": 5.418309
+},
+{
+"name": "Esso Bunnik",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.061663,
+"lon": 5.178911
+},
+{
+"name": "Esso Express",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.166348,
+"lon": 5.399619
+},
+{
+"name": "Shell",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.143876,
+"lon": 5.355556
+},
+{
+"name": "TotalEnergies Larenstein",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.116369,
+"lon": 5.1758
+},
+{
+"name": "Sakko",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.057333,
+"lon": 5.111883
+},
+{
+"name": "T-Energy express",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.051062,
+"lon": 5.109587
+},
+{
+"name": "ANAC Nieuwegein",
+"cls": "fuel",
+"sub": "fuel",
+"lat": 52.050006,
+"lon": 5.111797
+}
+],
+"albertHeijn": [
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.064922,
+"lon": 5.138158
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.109355,
+"lon": 5.182194
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.086594,
+"lon": 5.085699
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.093357,
+"lon": 5.117596
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.078036,
+"lon": 5.115675
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.094791,
+"lon": 5.119881
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.083531,
+"lon": 5.123481
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.095384,
+"lon": 5.130545
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.091564,
+"lon": 5.131334
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.089221,
+"lon": 5.135846
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.164361,
+"lon": 5.366655
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.159889,
+"lon": 5.366569
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.158786,
+"lon": 5.381997
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.074043,
+"lon": 5.094389
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.066429,
+"lon": 5.121174
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.176781,
+"lon": 5.403884
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.130748,
+"lon": 5.42834
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.144047,
+"lon": 5.38057
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.151628,
+"lon": 5.405547
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.067395,
+"lon": 5.19972
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.083343,
+"lon": 5.220389
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.104258,
+"lon": 5.094143
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.102232,
+"lon": 5.123041
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.106746,
+"lon": 5.134537
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.096056,
+"lon": 5.107731
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.092194,
+"lon": 5.103579
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.090862,
+"lon": 5.110332
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.089224,
+"lon": 5.113304
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.086752,
+"lon": 5.240087
+},
+{
+"name": "Albert Heijn",
+"cls": "grocery",
+"sub": "supermarket",
+"lat": 52.097088,
+"lon": 5.113379
+}
+]
+}

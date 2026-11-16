@@ -11,6 +11,7 @@ okhttp = "5.3.2"
 desugar = "2.1.5"
 junit = "4.13.2"
 kxml2 = "2.3.0"
+orgjson = "20250517"
 camerax = "1.6.2"
 paparazzi = "2.0.0-alpha04"
 
@@ -35,6 +36,7 @@ desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref 
 camerax-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
 camerax-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 camerax-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
+orgjson = { module = "org.json:json", version.ref = "orgjson" }
 kxml2 = { module = "net.sf.kxml:kxml2", version.ref = "kxml2" }
 junit = { module = "junit:junit", version.ref = "junit" }
 

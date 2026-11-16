@@ -1,6 +1,11 @@
 package app.drivr.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -151,6 +156,57 @@ fun TrafficAheadCard(next: TrafficAhead, modifier: Modifier = Modifier) {
       if (details.isNotEmpty()) {
         Text(details.joinToString(" · "), color = Drivr.textMuted, fontSize = 14.sp)
       }
+    }
+  }
+}
+
+/**
+ * Inside a jam: how much is left, as a bar that fills as you crawl through it (like Waze's jam
+ * meter). "Traffic jam · 1.8 km to go · ~6 min" with the car's position on the bar.
+ */
+@Composable
+fun JamCountdownCard(jam: TrafficAhead, modifier: Modifier = Modifier) {
+  val left = jam.endM ?: return
+  val color = jam.event.kind.color()
+  Column(
+      modifier
+          .fillMaxWidth()
+          .clip(RoundedCornerShape(Drivr.cardRadius))
+          .background(Drivr.card)
+          .padding(horizontal = 16.dp, vertical = 12.dp)
+  ) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Text(
+          "${jam.event.kind.label} · ${formatDistance(left)} to go",
+          color = Drivr.text,
+          fontSize = 16.sp,
+          fontWeight = FontWeight.SemiBold,
+          modifier = Modifier.weight(1f),
+      )
+      jam.secondsLeft?.let {
+        Text("~${(it / 60).roundToInt().coerceAtLeast(1)} min", color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+      }
+    }
+    Spacer(Modifier.height(10.dp))
+    // The jam as a bar: driven part grey, what's left in the jam's colour, car at the boundary.
+    BoxWithConstraints(Modifier.fillMaxWidth().height(18.dp)) {
+      val p = jam.progress.toFloat()
+      Row(Modifier.fillMaxWidth().height(8.dp).align(Alignment.CenterStart).clip(CircleShape)) {
+        if (p > 0f) Box(Modifier.weight(p).fillMaxHeight().background(Drivr.inactive))
+        if (p < 1f) Box(Modifier.weight(1f - p).fillMaxHeight().background(color))
+      }
+      val x = (maxWidth - 18.dp) * p
+      Box(
+          Modifier.offset(x = x).size(18.dp).clip(CircleShape).background(Drivr.accent)
+              .border(3.dp, Color.White, CircleShape)
+      )
+    }
+    Spacer(Modifier.height(6.dp))
+    Row {
+      Text(
+          "${(jam.progress * 100).roundToInt()}% through",
+          color = Drivr.textMuted, fontSize = 13.sp, modifier = Modifier.weight(1f))
+      jam.lengthM?.let { Text("${formatDistance(it)} jam", color = Drivr.textMuted, fontSize = 13.sp) }
     }
   }
 }
