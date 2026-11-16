@@ -11,6 +11,7 @@ data. No API keys, no paid services.
 | Routing + lane guidance | [Valhalla](https://github.com/valhalla/valhalla) | MIT |
 | Map data | OpenStreetMap | ODbL |
 | Live traffic | [NDW open data](https://opendata.ndw.nu) (Dutch government, DATEX II) | free, no key |
+| Speed cameras | OpenStreetMap via [Overpass API](https://overpass-api.de) | ODbL, free, no key |
 | Vector tiles | [OpenFreeMap](https://openfreemap.org) (OpenMapTiles schema) | free, no key |
 
 ## Layout
@@ -37,6 +38,11 @@ What works today:
 - Live traffic (Netherlands): accidents, jams, broken-down vehicles and closures from NDW, refreshed
   every 3 minutes. Shown on the map (jams turn the route red), a "Traffic jam in 4.2 km" card for
   the next event on your side of the road, and reported delays added to the arrival time.
+- Jam countdown: once you're in a jam, the card becomes a bar that fills as you get through it,
+  with the distance and a rough time to the end (NDW gives the delay, not the speed in the queue).
+- Speed cameras: fixed speed and red-light cameras and section controls (trajectcontroles) from
+  OpenStreetMap, loaded once per route. Pins on the map, a card from 1.5 km out with the limit,
+  and inside a section control your average speed (red when over the limit) and distance left.
 - AR junction view: camera with route ribbon, upright turn arrows and the direction sign. Opens
   ~300 m before each maneuver (Auto) or by hand. Pose from GPS course + gravity sensor, no ARCore.
 - Turn list with shields, destinations and lane advice ("Use lanes 4 & 5 of 5").
@@ -60,6 +66,11 @@ CI builds the APK on every push; download it from the run's artifacts.
 - Routing doesn't avoid jams yet: Valhalla's public server has no live traffic. NDW delays are
   added to the ETA, and closures could be passed to a self-hosted Valhalla as `exclude_polygons`.
 - Traffic covers the Netherlands only (NDW). Other countries need their own open feed.
+- Mobile police controls (flitsers, laser guns) are not included: there is no free or open live
+  source. Flitsmeister and Waze crowd-source them into closed databases. In the Netherlands,
+  warning about cameras in an app is legal; radar detectors and jammers are not.
+- Camera data is as good as OSM's mapping. The Openbaar Ministerie publishes fixed camera and
+  section control locations, which OSM mappers follow, but new ones can be missing for a while.
 - The map shows OSM roads, not yet the lane-level surface from the web prototype's lane engine
   (`lanegeom.js`). That needs the tile pipeline below.
 
@@ -71,5 +82,8 @@ shared community resources, so don't ship a real release against them:
 - Routing: `valhalla1.openstreetmap.de` (FOSSGIS). Fair use, no uptime guarantee. Self-host with
   `docker run -p 8002:8002 -v $PWD/data:/custom_files ghcr.io/valhalla/valhalla-scripted` and an
   OSM extract, then change `VALHALLA_URL` in `android/app/build.gradle.kts`.
+- Speed cameras: `overpass-api.de`. One query per route; the public server asks for under
+  10,000 queries a day and may be busy at peak times (the app then simply shows no cameras).
+  Other public instances or a self-hosted Overpass work by changing the endpoint in `AppModule`.
 - Map tiles: OpenFreeMap, drawn with Drivr's own style. Free with no limits stated; it will be
   joined by Drivr's own lane-level PMTiles bundled on the device.

@@ -11,6 +11,7 @@ import com.stadiamaps.ferrostar.core.location.SimulatedLocationProvider
 import com.stadiamaps.ferrostar.core.location.toAndroidLocation
 import com.stadiamaps.ferrostar.core.service.FerrostarForegroundServiceManager
 import com.stadiamaps.ferrostar.core.withJsonOptions
+import app.drivr.cameras.SpeedCameraRepository
 import app.drivr.traffic.TrafficRepository
 import java.time.Duration
 import okhttp3.OkHttpClient
@@ -28,6 +29,7 @@ import uniffi.ferrostar.stepAdvanceDistanceToEndOfStep
  * - Routing: Valhalla (FOSS), see BuildConfig.VALHALLA_URL.
  * - Map: MapLibre Native (FOSS) with Drivr's own style on OpenFreeMap tiles (style/ in the repo).
  * - Traffic: NDW open data (Dutch government, free, no key).
+ * - Speed cameras: OpenStreetMap via the public Overpass API (free, no key, fair use).
  */
 object AppModule {
   private lateinit var appContext: Context
@@ -77,6 +79,11 @@ object AppModule {
   /** Live Dutch traffic from NDW open data (free, no key). */
   val traffic: TrafficRepository by lazy {
     TrafficRepository(OkHttpClient.Builder().callTimeout(Duration.ofSeconds(30)).build())
+  }
+
+  /** Fixed speed cameras and section controls from OpenStreetMap (Overpass, free, no key). */
+  val speedCameras: SpeedCameraRepository by lazy {
+    SpeedCameraRepository(OkHttpClient.Builder().callTimeout(Duration.ofSeconds(40)).build())
   }
 
   val ttsObserver: AndroidTtsObserver by lazy { AndroidTtsObserver(appContext) }

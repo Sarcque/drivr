@@ -57,6 +57,20 @@ class TrafficTest {
   }
 
   @Test
+  fun inside_a_jam_counts_down_to_its_end() {
+    // Jam from 52.002 to 52.006; the car is at 52.003, so about a quarter of the way through.
+    val route = (0..100).map { LatLon(52.003 + it * 0.0001, 5.0) }
+    val jam =
+        TrafficEvent("j", TrafficKind.JAM, listOf(LatLon(52.002, 5.0), LatLon(52.006, 5.0)), delaySeconds = 400.0)
+    val ahead = RouteTraffic.ahead(route, listOf(jam)).single()
+    assertTrue(ahead.isInside)
+    assertEquals(333.0, ahead.endDistanceM!!, 5.0)
+    assertEquals(0.25f, ahead.progress, 0.02f)
+    // Three quarters of the delay left, plus free-flow time for the rest.
+    assertEquals(300.0 + 333.0 / 27.8, ahead.secondsLeft!!, 5.0)
+  }
+
+  @Test
   fun closed_roadworks_are_filtered_by_time() {
     val now = Instant.parse("2026-11-16T10:00:00Z")
     val ended = TrafficEvent("x", TrafficKind.ROAD_CLOSED, listOf(LatLon(52.0, 5.0)), end = Instant.parse("2026-11-15T10:00:00Z"))

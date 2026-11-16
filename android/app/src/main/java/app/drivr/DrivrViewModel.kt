@@ -1,6 +1,11 @@
 package app.drivr
 
+import android.os.SystemClock
 import android.util.Log
+import app.drivr.cameras.Enforcement
+import app.drivr.cameras.EnforcementAhead
+import app.drivr.cameras.RouteEnforcement
+import app.drivr.cameras.SpeedCameraRepository
 import app.drivr.traffic.LatLon
 import app.drivr.traffic.RouteTraffic
 import app.drivr.traffic.TrafficAhead
@@ -21,6 +26,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flowOf
@@ -45,6 +51,7 @@ class DrivrViewModel(
     private val core: FerrostarCore = AppModule.ferrostarCore,
     private val locationProvider: NavigationLocationProvider = AppModule.locationProvider,
     private val traffic: TrafficRepository = AppModule.traffic,
+    private val speedCameras: SpeedCameraRepository = AppModule.speedCameras,
 ) : DefaultNavigationViewModel(core, valhallaExtendedOSRMAnnotationPublisher()) {
 
   private val hasLocationPermission = MutableStateFlow(false)
@@ -72,8 +79,59 @@ class DrivrViewModel(
           .flowOn(Dispatchers.Default)
           .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+  /** Fixed cameras and section controls around the current route (OSM), loaded once per route. */
+  private val _enforcement = MutableStateFlow<List<Enforcement>>(emptyList())
+  val enforcement: StateFlow<List<Enforcement>> = _enforcement.asStateFlow()
+
+  val enforcementAhead: StateFlow<List<EnforcementAhead>> =
+      combine(super.navigationUiState, _enforcement) { ui, all ->
+            val route = if (ui.isNavigating()) remainingGeometry(ui) else null
+            if (route == null || all.isEmpty()) emptyList()
+            else RouteEnforcement.ahead(route.map { LatLon(it.lat, it.lng) }, all)
+          }
+          .flowOn(Dispatchers.Default)
+          .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+  /**
+   * Average speed since entering the section control we're in, like the cameras measure it:
+   * distance driven in the section over time spent in it.
+   */
+  val sectionAverageKmh: StateFlow<Int?> = run {
+    var sectionId: String? = null
+    var enteredAtMs = 0L
+    var entryLeftM = 0.0
+    enforcementAhead
+        .map { list ->
+          val inside = list.firstOrNull { it.isInsideSection }
+          if (inside == null) {
+            sectionId = null
+            return@map null
+          }
+          val left = inside.endDistanceM ?: return@map null
+          val now = SystemClock.elapsedRealtime()
+          if (inside.enforcement.id != sectionId) {
+            sectionId = inside.enforcement.id
+            enteredAtMs = now
+            entryLeftM = left
+          }
+          val seconds = (now - enteredAtMs) / 1000.0
+          if (seconds < 5) null else ((entryLeftM - left) / seconds * 3.6).toInt()
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+  }
+
   init {
     traffic.start(viewModelScope)
+    viewModelScope.launch {
+      super.navigationUiState
+          .map { it.routeGeometry }
+          .distinctUntilChanged()
+          .collect { geometry ->
+            _enforcement.value =
+                if (geometry.isNullOrEmpty()) emptyList()
+                else speedCameras.forRoute(geometry.map { LatLon(it.lat, it.lng) })
+          }
+    }
     viewModelScope.launch {
       hasLocationPermission
           .flatMapLatest { granted ->

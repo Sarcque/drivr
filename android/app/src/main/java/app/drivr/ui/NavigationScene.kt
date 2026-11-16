@@ -100,6 +100,9 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   val mapState = rememberNavigationMapState()
   val trafficEvents by viewModel.trafficEvents.collectAsState()
   val trafficAhead by viewModel.trafficAhead.collectAsState()
+  val enforcement by viewModel.enforcement.collectAsState()
+  val enforcementAhead by viewModel.enforcementAhead.collectAsState()
+  val sectionAverageKmh by viewModel.sectionAverageKmh.collectAsState()
   var showTurns by rememberSaveable { mutableStateOf(false) }
 
   // AR junction view: opens by hand, or automatically ~300 m before each maneuver when Auto is on.
@@ -119,6 +122,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
       showDefaultPuck = false,
       mapContent = { state ->
         TrafficLayers(trafficEvents)
+        EnforcementLayers(enforcement)
         ChevronPuck(state)
       },
       views =
@@ -138,7 +142,14 @@ fun NavigationScene(viewModel: DrivrViewModel) {
                   // Valhalla's ETA has no live traffic; add NDW's reported delays on the route.
                   val delayS = trafficAhead.sumOf { it.event.delaySeconds ?: 0.0 }
                   Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    trafficAhead.firstOrNull { it.distanceM < 30_000 }?.let { TrafficAheadCard(it) }
+                    // Inside a section control, or a camera within 1.5 km.
+                    enforcementAhead
+                        .firstOrNull { it.isInsideSection || it.distanceM in 0.0..1_500.0 }
+                        ?.let { EnforcementCard(it, sectionAverageKmh) }
+                    // In a jam: Waze-style countdown through it. Otherwise: the next event ahead.
+                    val jam = trafficAhead.firstOrNull { it.isInside }
+                    if (jam != null) JamCountdownCard(jam)
+                    else trafficAhead.firstOrNull { it.distanceM < 30_000 }?.let { TrafficAheadCard(it) }
                     TripCards(
                         speedLimitKmh = state.speedLimitKmh(),
                         speedKmh = state.location?.speed?.value?.let { (it * 3.6).roundToInt() },
