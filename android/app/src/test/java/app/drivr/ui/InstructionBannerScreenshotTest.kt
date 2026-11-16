@@ -130,7 +130,21 @@ class InstructionBannerScreenshotTest {
   fun trip_cards() {
     paparazzi.snapshot {
       Frame {
+        TrafficAheadCard(
+            app.drivr.traffic.TrafficAhead(
+                app.drivr.traffic.TrafficEvent(
+                    "jam",
+                    app.drivr.traffic.TrafficKind.JAM,
+                    listOf(app.drivr.traffic.LatLon(52.0, 5.0), app.drivr.traffic.LatLon(52.01, 5.0)),
+                    queueLengthM = 2800.0,
+                    delaySeconds = 231.0,
+                ),
+                4200.0,
+            )
+        )
+        Spacer(Modifier.height(10.dp))
         TripCards(
+            trafficDelayS = 231.0,
             speedLimitKmh = 100,
             speedKmh = 98,
             distanceRemainingM = 18_400.0,
@@ -140,6 +154,44 @@ class InstructionBannerScreenshotTest {
         )
       }
     }
+  }
+
+  @Test
+  fun turn_list() {
+    fun step(content: VisualInstructionContent, lanes: List<LaneInfo>, distance: Double) =
+        uniffi.ferrostar.RouteStep(
+            geometry = emptyList(),
+            distance = distance,
+            duration = distance / 25,
+            roadName = null,
+            exits = emptyList(),
+            instruction = content.text,
+            visualInstructions =
+                listOf(
+                    VisualInstruction(
+                        content,
+                        null,
+                        if (lanes.isEmpty()) null else VisualInstructionContent("", null, null, null, lanes, emptyList()),
+                        500.0,
+                    )
+                ),
+            spokenInstructions = emptyList(),
+            annotations = null,
+            incidents = emptyList(),
+            drivingSide = null,
+            roundaboutExitNumber = null,
+        )
+    val s = LaneInfo(false, listOf("straight"), null)
+    val r = LaneInfo(true, listOf("right"), "right")
+    val steps =
+        listOf(
+            step(a28OnRamp.primaryContent, emptyList(), 1800.0),
+            step(a28OnRamp.primaryContent, listOf(s, s, s, r, r), 2400.0),
+            step(rijnsweerd.primaryContent, listOf(r, r, s), 9000.0),
+            step(leusdenExit.primaryContent, listOf(s, s, s, r), 1200.0),
+            step(dodeweg.primaryContent, emptyList(), 800.0),
+        )
+    paparazzi.snapshot { Frame { TurnList(steps, 650.0, onClose = {}) } }
   }
 
   @Test

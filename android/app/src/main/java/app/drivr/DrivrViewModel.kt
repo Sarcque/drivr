@@ -1,6 +1,12 @@
 package app.drivr
 
 import android.util.Log
+import app.drivr.traffic.LatLon
+import app.drivr.traffic.RouteTraffic
+import app.drivr.traffic.TrafficAhead
+import app.drivr.traffic.TrafficEvent
+import app.drivr.traffic.TrafficRepository
+import app.drivr.ui.remainingGeometry
 import androidx.lifecycle.viewModelScope
 import com.stadiamaps.ferrostar.core.DefaultNavigationViewModel
 import com.stadiamaps.ferrostar.core.FerrostarCore
@@ -16,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -37,6 +44,7 @@ sealed interface RouteStatus {
 class DrivrViewModel(
     private val core: FerrostarCore = AppModule.ferrostarCore,
     private val locationProvider: NavigationLocationProvider = AppModule.locationProvider,
+    private val traffic: TrafficRepository = AppModule.traffic,
 ) : DefaultNavigationViewModel(core, valhallaExtendedOSRMAnnotationPublisher()) {
 
   private val hasLocationPermission = MutableStateFlow(false)
@@ -52,7 +60,20 @@ class DrivrViewModel(
           }
           .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), NavigationUiState.empty())
 
+  /** Live traffic events (NDW), and the ones on the route ahead, nearest first. */
+  val trafficEvents: StateFlow<List<TrafficEvent>> = traffic.events
+
+  val trafficAhead: StateFlow<List<TrafficAhead>> =
+      combine(super.navigationUiState, traffic.events) { ui, events ->
+            val route = if (ui.isNavigating()) remainingGeometry(ui) else null
+            if (route == null || events.isEmpty()) emptyList()
+            else RouteTraffic.ahead(route.map { LatLon(it.lat, it.lng) }, events)
+          }
+          .flowOn(Dispatchers.Default)
+          .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
   init {
+    traffic.start(viewModelScope)
     viewModelScope.launch {
       hasLocationPermission
           .flatMapLatest { granted ->

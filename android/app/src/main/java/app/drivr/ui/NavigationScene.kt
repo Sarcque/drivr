@@ -98,6 +98,9 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   val uiState by viewModel.navigationUiState.collectAsState()
   val routeStatus by viewModel.routeStatus.collectAsState()
   val mapState = rememberNavigationMapState()
+  val trafficEvents by viewModel.trafficEvents.collectAsState()
+  val trafficAhead by viewModel.trafficAhead.collectAsState()
+  var showTurns by rememberSaveable { mutableStateOf(false) }
 
   // AR junction view: opens by hand, or automatically ~300 m before each maneuver when Auto is on.
   var arManual by rememberSaveable { mutableStateOf(false) }
@@ -113,15 +116,11 @@ fun NavigationScene(viewModel: DrivrViewModel) {
       navigationMapState = mapState,
       navigationCameraOptions = drivingCameraOptions(),
       viewModel = viewModel,
-      locationPuckStyle =
-          NavigationMapPuckStyle(
-              dotFillColorCurrentLocation = Drivr.accent,
-              dotFillColorOldLocation = Drivr.accent,
-              accuracyStrokeColor = Color.Transparent,
-              accuracyFillColor = Drivr.accent.copy(alpha = 0.12f),
-              bearingColor = Drivr.accent,
-              dotRadius = 9.dp,
-          ),
+      showDefaultPuck = false,
+      mapContent = { state ->
+        TrafficLayers(trafficEvents)
+        ChevronPuck(state)
+      },
       views =
           NavigationViewComponentBuilder.Default()
               .withInstructionsView { modifier, state ->
@@ -136,14 +135,19 @@ fun NavigationScene(viewModel: DrivrViewModel) {
               }
               .withProgressView { modifier, state, onExit ->
                 state.progress?.let { progress ->
-                  TripCards(
-                      speedLimitKmh = state.speedLimitKmh(),
-                      speedKmh = state.location?.speed?.value?.let { (it * 3.6).roundToInt() },
-                      distanceRemainingM = progress.distanceRemaining,
-                      durationRemainingS = progress.durationRemaining,
-                      onEnd = onExit,
-                      modifier = modifier,
-                  )
+                  // Valhalla's ETA has no live traffic; add NDW's reported delays on the route.
+                  val delayS = trafficAhead.sumOf { it.event.delaySeconds ?: 0.0 }
+                  Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    trafficAhead.firstOrNull { it.distanceM < 30_000 }?.let { TrafficAheadCard(it) }
+                    TripCards(
+                        speedLimitKmh = state.speedLimitKmh(),
+                        speedKmh = state.location?.speed?.value?.let { (it * 3.6).roundToInt() },
+                        distanceRemainingM = progress.distanceRemaining,
+                        durationRemainingS = progress.durationRemaining + delayS,
+                        trafficDelayS = delayS,
+                        onEnd = onExit,
+                    )
+                  }
                 }
               }
               .withCustomOverlayView { modifier ->
@@ -171,7 +175,16 @@ fun NavigationScene(viewModel: DrivrViewModel) {
         auto = arAuto,
         onOpen = { arManual = true },
         onToggleAuto = { arAuto = !arAuto },
+        onTurns = { showTurns = !showTurns },
         modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
+    )
+  }
+  if (showTurns && uiState.isNavigating() && !showAr) {
+    TurnList(
+        steps = uiState.remainingSteps.orEmpty(),
+        distanceToNextManeuver = uiState.progress?.distanceToNextManeuver ?: 0.0,
+        onClose = { showTurns = false },
+        modifier = Modifier.align(Alignment.Center).padding(horizontal = 16.dp),
     )
   }
   if (showAr) {
@@ -204,6 +217,7 @@ private fun ArToggle(
     auto: Boolean,
     onOpen: () -> Unit,
     onToggleAuto: () -> Unit,
+    onTurns: () -> Unit,
     modifier: Modifier,
 ) {
   Column(
@@ -213,6 +227,7 @@ private fun ArToggle(
           .padding(6.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
   ) {
+    TextButton(onClick = onTurns) { Text("Turns", color = Color.White, fontSize = 12.sp) }
     TextButton(onClick = onOpen) { Text("AR", color = Color.White, fontWeight = FontWeight.Bold) }
     TextButton(onClick = onToggleAuto) {
       Text(

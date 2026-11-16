@@ -11,6 +11,7 @@ import com.stadiamaps.ferrostar.core.location.SimulatedLocationProvider
 import com.stadiamaps.ferrostar.core.location.toAndroidLocation
 import com.stadiamaps.ferrostar.core.service.FerrostarForegroundServiceManager
 import com.stadiamaps.ferrostar.core.withJsonOptions
+import app.drivr.traffic.TrafficRepository
 import java.time.Duration
 import okhttp3.OkHttpClient
 import uniffi.ferrostar.CourseFiltering
@@ -25,7 +26,8 @@ import uniffi.ferrostar.stepAdvanceDistanceToEndOfStep
  * Hand-rolled dependency wiring. Every service here is free and open:
  * - Location: Android's own LocationManager (no Google Play Services).
  * - Routing: Valhalla (FOSS), see BuildConfig.VALHALLA_URL.
- * - Map: MapLibre Native (FOSS) with an OSM-based style, see BuildConfig.MAP_STYLE_URL.
+ * - Map: MapLibre Native (FOSS) with Drivr's own style on OpenFreeMap tiles (style/ in the repo).
+ * - Traffic: NDW open data (Dutch government, free, no key).
  */
 object AppModule {
   private lateinit var appContext: Context
@@ -70,6 +72,11 @@ object AppModule {
                 CourseFiltering.SNAP_TO_ROUTE,
             ),
     )
+  }
+
+  /** Live Dutch traffic from NDW open data (free, no key). */
+  val traffic: TrafficRepository by lazy {
+    TrafficRepository(OkHttpClient.Builder().callTimeout(Duration.ofSeconds(30)).build())
   }
 
   val ttsObserver: AndroidTtsObserver by lazy { AndroidTtsObserver(appContext) }

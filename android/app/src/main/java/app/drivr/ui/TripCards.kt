@@ -39,6 +39,7 @@ fun TripCards(
     distanceRemainingM: Double,
     durationRemainingS: Double,
     onEnd: (() -> Unit)?,
+    trafficDelayS: Double = 0.0,
     modifier: Modifier = Modifier,
     now: LocalTime = LocalTime.now(),
 ) {
@@ -68,6 +69,13 @@ fun TripCards(
           color = Drivr.text,
           fontSize = 14.sp,
       )
+      if (trafficDelayS >= 60) {
+        Text(
+            "incl. +${formatDuration(trafficDelayS)} traffic",
+            color = TrafficColors.slow,
+            fontSize = 12.sp,
+        )
+      }
     }
   }
 }

@@ -10,6 +10,7 @@ data. No API keys, no paid services.
 | Turn-by-turn | [Ferrostar](https://github.com/stadiamaps/ferrostar) | BSD-3 |
 | Routing + lane guidance | [Valhalla](https://github.com/valhalla/valhalla) | MIT |
 | Map data | OpenStreetMap | ODbL |
+| Live traffic | [NDW open data](https://opendata.ndw.nu) (Dutch government, DATEX II) | free, no key |
 | Vector tiles | [OpenFreeMap](https://openfreemap.org) (OpenMapTiles schema) | free, no key |
 
 ## Layout
@@ -33,6 +34,12 @@ What works today:
 - "Start test drive": simulated drive from Utrecht Centraal over the A28 through Knooppunt
   Rijnsweerd to Amersfoort. Long-press the map to route from your real location.
 - Location from Android's own LocationManager (no Google Play Services).
+- Live traffic (Netherlands): accidents, jams, broken-down vehicles and closures from NDW, refreshed
+  every 3 minutes. Shown on the map (jams turn the route red), a "Traffic jam in 4.2 km" card for
+  the next event on your side of the road, and reported delays added to the arrival time.
+- AR junction view: camera with route ribbon, upright turn arrows and the direction sign. Opens
+  ~300 m before each maneuver (Auto) or by hand. Pose from GPS course + gravity sensor, no ARCore.
+- Turn list with shields, destinations and lane advice ("Use lanes 4 & 5 of 5").
 
 Build:
 
@@ -44,6 +51,17 @@ cd android
 ```
 
 CI builds the APK on every push; download it from the run's artifacts.
+
+### Known limits
+
+- Phone GPS can't tell which lane you're in, so lane advice names the lanes to use rather than
+  "move right 1 lane". The AR overlay is accurate to a few metres: good for "turn here", not for
+  painting a single lane.
+- Routing doesn't avoid jams yet: Valhalla's public server has no live traffic. NDW delays are
+  added to the ETA, and closures could be passed to a self-hosted Valhalla as `exclude_polygons`.
+- Traffic covers the Netherlands only (NDW). Other countries need their own open feed.
+- The map shows OSM roads, not yet the lane-level surface from the web prototype's lane engine
+  (`lanegeom.js`). That needs the tile pipeline below.
 
 ### Free public servers, and their limits
 
