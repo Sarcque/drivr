@@ -11,6 +11,11 @@ import com.stadiamaps.ferrostar.core.location.SimulatedLocationProvider
 import com.stadiamaps.ferrostar.core.location.toAndroidLocation
 import com.stadiamaps.ferrostar.core.service.FerrostarForegroundServiceManager
 import com.stadiamaps.ferrostar.core.withJsonOptions
+import app.drivr.places.FranceFuelPrices
+import app.drivr.places.FuelPriceRepository
+import app.drivr.places.OverpassClient
+import app.drivr.places.PhotonClient
+import app.drivr.places.PlacesRepository
 import app.drivr.traffic.TrafficRepository
 import java.time.Duration
 import okhttp3.OkHttpClient
@@ -77,6 +82,23 @@ object AppModule {
   /** Live Dutch traffic from NDW open data (free, no key). */
   val traffic: TrafficRepository by lazy {
     TrafficRepository(OkHttpClient.Builder().callTimeout(Duration.ofSeconds(30)).build())
+  }
+
+  /** Places: OSM via Overpass, typed search via Photon, official fuel prices where published. */
+  val places: PlacesRepository by lazy {
+    val http =
+        OkHttpClient.Builder()
+            .callTimeout(Duration.ofSeconds(30))
+            .addInterceptor { chain ->
+              // OSM services ask clients to identify themselves.
+              chain.proceed(chain.request().newBuilder().header("User-Agent", PhotonClient.USER_AGENT).build())
+            }
+            .build()
+    PlacesRepository(
+        OverpassClient(http),
+        PhotonClient(http),
+        FuelPriceRepository(listOf(FranceFuelPrices(http))),
+    )
   }
 
   val ttsObserver: AndroidTtsObserver by lazy { AndroidTtsObserver(appContext) }

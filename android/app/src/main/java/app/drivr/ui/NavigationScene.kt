@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -101,6 +102,10 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   val trafficEvents by viewModel.trafficEvents.collectAsState()
   val trafficAhead by viewModel.trafficAhead.collectAsState()
   var showTurns by rememberSaveable { mutableStateOf(false) }
+  val places by viewModel.places.collectAsState()
+  androidx.activity.compose.BackHandler(enabled = places.open || places.selected != null) {
+    if (places.selected != null) viewModel.selectPlace(null) else viewModel.closePlaces()
+  }
 
   // AR junction view: opens by hand, or automatically ~300 m before each maneuver when Auto is on.
   var arManual by rememberSaveable { mutableStateOf(false) }
@@ -119,6 +124,10 @@ fun NavigationScene(viewModel: DrivrViewModel) {
       showDefaultPuck = false,
       mapContent = { state ->
         TrafficLayers(trafficEvents)
+        PlacesLayer(
+            results = places.selected?.let { listOf(it) } ?: places.results,
+            selectedId = places.selected?.place?.id,
+        )
         ChevronPuck(state)
       },
       views =
@@ -151,7 +160,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
                 }
               }
               .withCustomOverlayView { modifier ->
-                if (!uiState.isNavigating()) {
+                if (!uiState.isNavigating() && !places.open) {
                   StartPanel(
                       status = routeStatus,
                       onDemoDrive = viewModel::startDemoDrive,
@@ -170,14 +179,57 @@ fun NavigationScene(viewModel: DrivrViewModel) {
           ),
   )
 
-  if (uiState.isNavigating() && !showAr) {
-    ArToggle(
-        auto = arAuto,
-        onOpen = { arManual = true },
-        onToggleAuto = { arAuto = !arAuto },
-        onTurns = { showTurns = !showTurns },
-        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
-    )
+  if (uiState.isNavigating() && !showAr && !places.open) {
+    Column(
+        Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+      StopsButton(onClick = viewModel::openPlaces)
+      ArToggle(
+          auto = arAuto,
+          onOpen = { arManual = true },
+          onToggleAuto = { arAuto = !arAuto },
+          onTurns = { showTurns = !showTurns },
+          modifier = Modifier,
+      )
+    }
+  }
+
+  // Search bar and categories while browsing; the places sheet or a place's details when open.
+  if (!uiState.isNavigating()) {
+    Column(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)) {
+      PlacesSearchBar(places.query, viewModel::searchText, onFocus = viewModel::openPlaces)
+      if (!places.open) {
+        Spacer(Modifier.height(10.dp))
+        CategoryChips(null, viewModel::searchCategory)
+      }
+    }
+  }
+  if (places.open) {
+    val selected = places.selected
+    val sheetModifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
+    if (selected != null) {
+      PlaceDetailCard(
+          result = selected,
+          navigating = uiState.isNavigating(),
+          exactDetourS = places.exactDetourS,
+          onAddStop = { viewModel.addStop(selected.place) },
+          onDrive = { viewModel.driveTo(selected.place) },
+          onBack = { viewModel.selectPlace(null) },
+          priceCountry = places.priceCountry,
+          modifier = sheetModifier,
+      )
+    } else {
+      PlacesSheet(
+          state = places,
+          onSelectCategory = viewModel::searchCategory,
+          onSelect = viewModel::selectPlace,
+          onClose = viewModel::closePlaces,
+          priceCountry = places.priceCountry,
+          modifier = sheetModifier,
+      )
+    }
   }
   if (showTurns && uiState.isNavigating() && !showAr) {
     TurnList(
@@ -240,7 +292,7 @@ private fun ArToggle(
 }
 
 @Composable
-private fun StartPanel(status: RouteStatus, onDemoDrive: () -> Unit, modifier: Modifier) {
+internal fun StartPanel(status: RouteStatus, onDemoDrive: () -> Unit, modifier: Modifier) {
   Column(
       modifier =
           modifier
@@ -254,8 +306,9 @@ private fun StartPanel(status: RouteStatus, onDemoDrive: () -> Unit, modifier: M
     Text("Drivr", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(4.dp))
     Text(
-        "Long-press the map to drive there, or take the test drive through Knooppunt " +
-            "Rijnsweerd (Utrecht) with simulated GPS.",
+        "Search above or long-press the map to drive there, or take the test drive through " +
+            "Knooppunt Rijnsweerd (Utrecht) with simulated GPS. While driving, tap Stops to find " +
+            "fuel, charging or food along the route.",
         color = Drivr.textMuted,
         fontSize = 14.sp,
     )
