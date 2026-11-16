@@ -149,4 +149,41 @@ class PlacesScreenshotTest {
       }
     }
   }
+
+  // ---- Driving cards: jam countdown and speed cameras (sample events on the A28) ----
+
+  private fun drivingScreen(top: @Composable () -> Unit) {
+    paparazzi.snapshot {
+      Screen("bg_detail.png") {
+        Column(Modifier.align(Alignment.BottomCenter).padding(12.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+          top()
+          TripCards(speedLimitKmh = 100, speedKmh = 24, distanceRemainingM = 9_400.0, durationRemainingS = 900.0,
+              trafficDelayS = 420.0, onEnd = null, now = java.time.LocalTime.of(9, 12))
+        }
+      }
+    }
+  }
+
+  @Test
+  fun jam_countdown() {
+    val jam = app.drivr.traffic.TrafficEvent("j", app.drivr.traffic.TrafficKind.JAM,
+        listOf(app.drivr.traffic.LatLon(52.12, 5.30), app.drivr.traffic.LatLon(52.13, 5.36)), delaySeconds = 420.0)
+    val ahead = app.drivr.traffic.TrafficAhead(jam, 0.0, endM = 1_800.0, lengthM = 4_300.0)
+    drivingScreen { JamCountdownCard(ahead) }
+  }
+
+  @Test
+  fun average_speed_section() {
+    val cam = app.drivr.cameras.SpeedCamera("s", app.drivr.cameras.CameraKind.SECTION, LatLng(52.12, 5.30),
+        end = LatLng(52.13, 5.36), maxSpeedKmh = 100)
+    drivingScreen {
+      CameraAheadCard(app.drivr.cameras.CameraAhead(cam, 0.0, 3_200.0), averageKmh = 97.4)
+    }
+  }
+
+  @Test
+  fun speed_camera_ahead() {
+    val cam = app.drivr.cameras.SpeedCamera("c", app.drivr.cameras.CameraKind.SPEED, LatLng(52.12, 5.30), maxSpeedKmh = 100)
+    drivingScreen { CameraAheadCard(app.drivr.cameras.CameraAhead(cam, 450.0), averageKmh = null) }
+  }
 }

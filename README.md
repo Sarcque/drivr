@@ -12,6 +12,9 @@ data. No API keys, no paid services.
 | Map data | OpenStreetMap | ODbL |
 | Live traffic | [NDW open data](https://opendata.ndw.nu) (Dutch government, DATEX II) | free, no key |
 | Vector tiles | [OpenFreeMap](https://openfreemap.org) (OpenMapTiles schema) | free, no key |
+| Places, speed cameras | OpenStreetMap via [Overpass](https://overpass-api.de) | ODbL, no key |
+| Typed search | [Photon](https://photon.komoot.io) (OSM geocoder) | Apache-2.0, no key |
+| Fuel prices (France) | [prix-carburants](https://www.prix-carburants.gouv.fr) open data | Licence Ouverte, no key |
 
 ## Layout
 
@@ -40,6 +43,18 @@ What works today:
 - AR junction view: camera with route ribbon, upright turn arrows and the direction sign. Opens
   ~300 m before each maneuver (Auto) or by hand. Pose from GPS course + gravity sensor, no ARCore.
 - Turn list with shields, destinations and lane advice ("Use lanes 4 & 5 of 5").
+- Places: search bar and category chips (fuel, charging, food, coffee, groceries, shops, parking,
+  rest stops) from OSM. While driving, **Stops** lists them along the next 100 km in driving
+  order with a detour estimate; opening one asks Valhalla for the exact extra time, and **Add
+  stop** re-routes via it. Fuel stations show fuel types, hours, shop/toilets; chargers show
+  connectors and power.
+- Fuel prices where a government publishes them as free, keyless open data. France is wired in.
+  The Netherlands and Belgium publish no per-station prices (only CBS national averages), so the
+  app says so instead of showing stale crowd prices.
+- Jam countdown: inside a jam, a bar shows how far through it you are, metres and minutes left.
+- Speed cameras: fixed cameras, red-light cameras and average-speed sections (trajectcontroles)
+  from OSM along the route, filtered to your direction. Inside a section it shows your running
+  average against the limit.
 
 Build:
 
@@ -63,6 +78,31 @@ CI builds the APK on every push; download it from the run's artifacts.
 - The map shows OSM roads, not yet the lane-level surface from the web prototype's lane engine
   (`lanegeom.js`). That needs the tile pipeline below.
 
+### Roadmap: what's still missing
+
+Done: lane guidance banner, live NDW traffic with jam countdown, AR junction view, places along
+the route with add stop, fuel prices (France), fixed speed cameras and sections.
+
+Next, in order of impact:
+
+1. **Route around jams.** Self-host Valhalla and feed it NDW speeds/closures (`exclude_polygons`,
+   or live speeds via Valhalla's traffic tiles). The single biggest gap with Waze/Google.
+2. **Offline maps and search.** Bundle PMTiles per region, run Valhalla tiles and a POI index on
+   the device. Works in tunnels and abroad, no server costs.
+3. **Lane-level map surface.** The Planetiler profile that turns OSM `lanes`/`turn:lanes`/`width`
+   into lane polygons and markings (the web prototype's `lanegeom.js`).
+4. **Android Auto / Automotive.** Car App Library navigation template, using the same view model.
+5. **Driver reports.** Police checks, hazards, objects on the road: needs a small self-hosted
+   backend (no open dataset exists for mobile police checks). Crowd fuel prices for NL/BE could
+   use the same backend.
+6. **EV routing.** Battery model and charging stops (OSM chargers + Valhalla), plus live charger
+   availability where open (NDW publishes Dutch charge point status as open data).
+7. **More fuel price feeds.** Spain, Italy, Austria (free, keyless); Germany (Tankerkönig, free key).
+8. **Voice and UX.** Natural voice per language (Piper TTS, on device), speed-limit warnings,
+   saved places, home/work, recent searches, multi-stop editing, dark/night map style.
+9. **Per-country camera rules.** Turn camera warnings off where they're illegal (Germany,
+   Switzerland) and show "danger zones" in France.
+
 ### Free public servers, and their limits
 
 The app points at public servers so it runs out of the box. Both are free and keyless but are
@@ -71,5 +111,7 @@ shared community resources, so don't ship a real release against them:
 - Routing: `valhalla1.openstreetmap.de` (FOSSGIS). Fair use, no uptime guarantee. Self-host with
   `docker run -p 8002:8002 -v $PWD/data:/custom_files ghcr.io/valhalla/valhalla-scripted` and an
   OSM extract, then change `VALHALLA_URL` in `android/app/build.gradle.kts`.
+- Places and cameras: public Overpass instances (overpass-api.de, private.coffee) and Photon
+  (komoot). Same fair-use caveat; both are self-hostable.
 - Map tiles: OpenFreeMap, drawn with Drivr's own style. Free with no limits stated; it will be
   joined by Drivr's own lane-level PMTiles bundled on the device.

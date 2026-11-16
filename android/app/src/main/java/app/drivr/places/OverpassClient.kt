@@ -29,14 +29,17 @@ class OverpassClient(
     return run(buildQuery(category, "around:$corridorM,$coords"))
   }
 
-  private fun run(query: String): List<Place> {
+  private fun run(query: String): List<Place> = parse(raw(query))
+
+  /** Runs an Overpass QL query and returns the JSON, trying each endpoint in turn. */
+  fun raw(query: String): String {
     var last: Exception? = null
     for (url in endpoints) {
       try {
         val req = Request.Builder().url(url).post(FormBody.Builder().add("data", query).build()).build()
         http.newCall(req).execute().use { res ->
           check(res.isSuccessful) { "Overpass HTTP ${res.code}" }
-          return parse(res.body.string())
+          return res.body.string()
         }
       } catch (e: Exception) {
         last = e

@@ -70,6 +70,50 @@ class RouteCorridor(route: List<LatLng>) {
     return out
   }
 
+  /**
+   * The route simplified so no point of the road is more than [toleranceM] from the result
+   * (Douglas-Peucker). For narrow corridors such as speed cameras, where even sampling would cut
+   * corners.
+   */
+  fun simplify(toleranceM: Double): List<LatLng> {
+    if (pts.size < 3) return pts
+    val keep = BooleanArray(pts.size).also { it[0] = true; it[pts.size - 1] = true }
+    val stack = ArrayDeque<Pair<Int, Int>>().apply { add(0 to pts.size - 1) }
+    while (stack.isNotEmpty()) {
+      val (a, b) = stack.removeLast()
+      var worst = -1.0
+      var idx = -1
+      for (i in a + 1 until b) {
+        val d = segDist(i, a, b)
+        if (d > worst) {
+          worst = d
+          idx = i
+        }
+      }
+      if (idx >= 0 && worst > toleranceM) {
+        keep[idx] = true
+        stack.add(a to idx)
+        stack.add(idx to b)
+      }
+    }
+    return pts.filterIndexed { i, _ -> keep[i] }
+  }
+
+  private fun segDist(i: Int, a: Int, b: Int): Double {
+    val dx = xs[b] - xs[a]
+    val dy = ys[b] - ys[a]
+    val l2 = dx * dx + dy * dy
+    val t = if (l2 == 0.0) 0.0 else (((xs[i] - xs[a]) * dx + (ys[i] - ys[a]) * dy) / l2).coerceIn(0.0, 1.0)
+    return dist(xs[i], ys[i], xs[a] + t * dx, ys[a] + t * dy)
+  }
+
+  /** Bearing of the route (degrees from north) at [alongM]. */
+  fun bearingAt(alongM: Double): Double {
+    var i = cum.indexOfFirst { it >= alongM }.coerceIn(1, pts.size - 1)
+    while (i < pts.size - 1 && cum[i] == cum[i - 1]) i++
+    return (Math.toDegrees(kotlin.math.atan2(xs[i] - xs[i - 1], ys[i] - ys[i - 1])) + 360) % 360
+  }
+
   companion object {
     private fun dist(x1: Double, y1: Double, x2: Double, y2: Double): Double {
       val dx = x2 - x1

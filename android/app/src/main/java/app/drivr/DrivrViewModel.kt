@@ -6,6 +6,10 @@ import app.drivr.traffic.RouteTraffic
 import app.drivr.traffic.TrafficAhead
 import app.drivr.traffic.TrafficEvent
 import app.drivr.traffic.TrafficRepository
+import app.drivr.cameras.CameraAhead
+import app.drivr.cameras.SectionTracker
+import app.drivr.cameras.SpeedCamera
+import app.drivr.cameras.SpeedCameraClient
 import app.drivr.places.LatLng
 import app.drivr.places.Place
 import app.drivr.places.PlaceCategory
@@ -26,7 +30,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flowOf
@@ -70,6 +76,7 @@ class DrivrViewModel(
     private val locationProvider: NavigationLocationProvider = AppModule.locationProvider,
     private val traffic: TrafficRepository = AppModule.traffic,
     private val placesRepo: PlacesRepository = AppModule.places,
+    private val cameraClient: SpeedCameraClient = AppModule.speedCameras,
 ) : DefaultNavigationViewModel(core, valhallaExtendedOSRMAnnotationPublisher()) {
 
   private val hasLocationPermission = MutableStateFlow(false)
@@ -97,6 +104,23 @@ class DrivrViewModel(
           .flowOn(Dispatchers.Default)
           .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+  /** Fixed speed cameras and average-speed sections on the current route (OSM). */
+  private val cameras = MutableStateFlow<List<SpeedCamera>>(emptyList())
+  val cameraList: StateFlow<List<SpeedCamera>> = cameras.asStateFlow()
+  private val sectionTracker = SectionTracker()
+
+  /** Cameras on the route ahead, nearest first, and the average speed inside a section. */
+  val camerasAhead: StateFlow<Pair<List<CameraAhead>, Double?>> =
+      combine(super.navigationUiState, cameras) { ui, cams ->
+            val route = if (ui.isNavigating() && cams.isNotEmpty()) remainingGeometry(ui) else null
+            val ahead =
+                if (route == null) emptyList()
+                else SpeedCameraClient.ahead(route.map { LatLng(it.lat, it.lng) }, cams)
+            ahead to sectionTracker.update(ahead.firstOrNull { it.inside }, System.currentTimeMillis())
+          }
+          .flowOn(Dispatchers.Default)
+          .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList<CameraAhead>() to null)
+
   private val _places = MutableStateFlow(PlacesState())
   val places = _places.asStateFlow()
   private var placesJob: Job? = null
@@ -108,6 +132,7 @@ class DrivrViewModel(
 
   init {
     traffic.start(viewModelScope)
+    watchRouteForCameras()
     viewModelScope.launch {
       hasLocationPermission
           .flatMapLatest { granted ->
@@ -115,6 +140,21 @@ class DrivrViewModel(
             else flowOf(DemoRoute.origin)
           }
           .collect { browsingLocation.value = it }
+    }
+  }
+
+  private fun watchRouteForCameras() {
+    viewModelScope.launch(Dispatchers.IO) {
+      super.navigationUiState
+          .map { it.routeGeometry }
+          .distinctUntilChanged()
+          .collectLatest { geometry ->
+            cameras.value = emptyList()
+            if (geometry == null || geometry.size < 2) return@collectLatest
+            runCatching { cameraClient.alongRoute(geometry.map { LatLng(it.lat, it.lng) }) }
+                .onSuccess { cameras.value = it }
+                .onFailure { Log.w(TAG, "Speed cameras unavailable", it) }
+          }
     }
   }
 

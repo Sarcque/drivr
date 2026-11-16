@@ -103,6 +103,8 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   val trafficAhead by viewModel.trafficAhead.collectAsState()
   var showTurns by rememberSaveable { mutableStateOf(false) }
   val places by viewModel.places.collectAsState()
+  val cameraList by viewModel.cameraList.collectAsState()
+  val camerasAhead by viewModel.camerasAhead.collectAsState()
   androidx.activity.compose.BackHandler(enabled = places.open || places.selected != null) {
     if (places.selected != null) viewModel.selectPlace(null) else viewModel.closePlaces()
   }
@@ -124,6 +126,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
       showDefaultPuck = false,
       mapContent = { state ->
         TrafficLayers(trafficEvents)
+        CamerasLayer(cameraList)
         PlacesLayer(
             results = places.selected?.let { listOf(it) } ?: places.results,
             selectedId = places.selected?.place?.id,
@@ -147,7 +150,10 @@ fun NavigationScene(viewModel: DrivrViewModel) {
                   // Valhalla's ETA has no live traffic; add NDW's reported delays on the route.
                   val delayS = trafficAhead.sumOf { it.event.delaySeconds ?: 0.0 }
                   Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    trafficAhead.firstOrNull { it.distanceM < 30_000 }?.let { TrafficAheadCard(it) }
+                    camerasAhead.first.relevant()?.let { CameraAheadCard(it, camerasAhead.second) }
+                    val jam = trafficAhead.firstOrNull { it.inside }
+                    if (jam != null) JamCountdownCard(jam)
+                    else trafficAhead.firstOrNull { it.distanceM < 30_000 }?.let { TrafficAheadCard(it) }
                     TripCards(
                         speedLimitKmh = state.speedLimitKmh(),
                         speedKmh = state.location?.speed?.value?.let { (it * 3.6).roundToInt() },

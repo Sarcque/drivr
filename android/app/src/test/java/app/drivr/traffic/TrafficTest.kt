@@ -64,4 +64,27 @@ class TrafficTest {
     val live = TrafficEvent("z", TrafficKind.ROAD_CLOSED, listOf(LatLon(52.0, 5.0)), start = Instant.parse("2026-11-01T10:00:00Z"))
     assertEquals(listOf("z"), listOf(ended, future, live).filter { it.isActive(now) }.map { it.id })
   }
+
+  @Test
+  fun countdown_inside_a_jam() {
+    // Route heading north along lon 5.0; a 4.4 km jam from 52.00 to 52.04, car at 52.03.
+    val route = (30..100).map { LatLon(52.0 + it * 0.001, 5.0) }
+    val jam = TrafficEvent("j", TrafficKind.JAM, (0..40).map { LatLon(52.0 + it * 0.001, 5.0) }, delaySeconds = 600.0)
+    val inside = RouteTraffic.ahead(route, listOf(jam)).single()
+    assertTrue(inside.inside)
+    assertEquals(1112.0, inside.endM!!, 15.0)
+    assertEquals(0.75, inside.progress, 0.01)
+    // A quarter of (4448 m at 100 km/h + 600 s) is left.
+    assertEquals((4448 / (100 / 3.6) + 600) * 0.25, inside.secondsLeft!!, 5.0)
+  }
+
+  @Test
+  fun jam_ahead_knows_its_end() {
+    val route = (0..100).map { LatLon(52.0 + it * 0.001, 5.0) }
+    val jam = TrafficEvent("j", TrafficKind.JAM, (20..40).map { LatLon(52.0 + it * 0.001, 5.0) })
+    val a = RouteTraffic.ahead(route, listOf(jam)).single()
+    assertTrue(!a.inside)
+    assertEquals(2224.0, a.distanceM, 20.0)
+    assertEquals(4448.0, a.endM!!, 30.0)
+  }
 }
