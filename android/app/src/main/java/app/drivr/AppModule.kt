@@ -124,5 +124,8 @@ object AppModule {
 
   val settings: app.drivr.settings.SettingsStore by lazy { app.drivr.settings.SettingsStore(appContext) }
 
+  /** Now-playing and play/pause/skip for whatever music app is playing (needs notification access). */
+  val music: app.drivr.music.MusicController by lazy { app.drivr.music.MusicController(appContext) }
+
   val ttsObserver: AndroidTtsObserver by lazy { AndroidTtsObserver(appContext) }
 }

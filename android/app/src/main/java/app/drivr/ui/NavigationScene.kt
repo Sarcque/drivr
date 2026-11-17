@@ -148,6 +148,26 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   androidx.activity.compose.BackHandler(enabled = showSettings) { showSettings = false }
   androidx.activity.compose.BackHandler(enabled = showTurns) { showTurns = false }
 
+  // Music: one button next to the gear while browsing; while driving only via the "..." menu,
+  // and only when enabled in Settings.
+  val music = app.drivr.AppModule.music
+  val musicState by music.state.collectAsState()
+  var showMusic by rememberSaveable { mutableStateOf(false) }
+  val musicAllowedNow = !uiState.isNavigating() || settings.musicWhileDriving
+  val context = LocalContext.current
+  val musicCard: @Composable (Modifier) -> Unit = { m ->
+    MusicCard(
+        state = musicState,
+        onPlayPause = music::playPause,
+        onPrevious = { music.previous() },
+        onNext = { music.next() },
+        onOpenPlayer = music::openPlayer,
+        onAllow = { context.startActivity(music.accessSettingsIntent()) },
+        onClose = { showMusic = false },
+        modifier = m,
+    )
+  }
+
   // AR junction view: off unless enabled in Settings. Opens by hand, or ~300 m before each
   // maneuver when "Open AR before turns" is on.
   var arManual by rememberSaveable { mutableStateOf(false) }
@@ -247,6 +267,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
         // Valhalla's ETA has no live traffic; add NDW's reported delays on the route.
         val delayS = trafficAhead.sumOf { it.event.delaySeconds ?: 0.0 }
         Column(m, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          if (showMusic && musicAllowedNow) musicCard(Modifier)
           DrivingAlert(
               camerasAhead.first, camerasAhead.second,
               if (settings.trafficAlerts) trafficAhead else emptyList())
@@ -297,6 +318,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
         if (navigating) {
           add("Turn list" to { showTurns = true })
           if (settings.arEnabled) add("AR view" to { arManual = true })
+          if (settings.musicWhileDriving) add("Music" to { showMusic = !showMusic })
           add("Settings" to { showSettings = true })
           add("End trip" to viewModel::stopNavigation)
         }
@@ -335,10 +357,13 @@ fun NavigationScene(viewModel: DrivrViewModel) {
               PlacesSearchBar(places.query, viewModel::searchText, onFocus = viewModel::openPlaces, modifier = Modifier.weight(1f))
               if (!places.open) {
                 Spacer(Modifier.width(8.dp))
+                MusicButton(onClick = { showMusic = !showMusic })
+                Spacer(Modifier.width(8.dp))
                 SettingsButton(onClick = { showSettings = true })
               }
             }
             if (!places.open) CategoryChips(null, viewModel::searchCategory)
+            if (!places.open && showMusic) musicCard(Modifier)
             status(Modifier)
           },
           buttons = buttons,
@@ -366,7 +391,11 @@ fun NavigationScene(viewModel: DrivrViewModel) {
       }
     }
     if (showSettings) {
-      SettingsScreen(settings, viewModel::updateSettings, onClose = { showSettings = false })
+      SettingsScreen(
+          settings, viewModel::updateSettings, onClose = { showSettings = false },
+          musicAccess = musicState.hasAccess,
+          onMusicAccess = { context.startActivity(music.accessSettingsIntent()) },
+      )
     }
   }
 }
