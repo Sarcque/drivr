@@ -49,7 +49,7 @@ class SpeedCameraClient(private val overpass: OverpassClient) {
     val line = RouteCorridor(route).simplify(15.0)
     return line.chunked(400).flatMapIndexed { i, chunk ->
       val withJoin = if (i > 0) listOf(line[i * 400 - 1]) + chunk else chunk
-      if (withJoin.size < 2) emptyList() else parse(overpass.raw(query(withJoin, corridorM)))
+      if (withJoin.size < 2) emptyList() else parse(overpass.rawBlocking(query(withJoin, corridorM)))
     }.distinctBy { it.id }
   }
 

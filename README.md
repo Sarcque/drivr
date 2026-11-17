@@ -32,6 +32,11 @@ What works today:
 - MapLibre map with a driving camera (zoom 17.6, 60° pitch, puck in the lower third).
 - Routing through Valhalla with Ferrostar's navigation session: snapping, step advance, rerouting,
   spoken instructions (Android TTS), foreground service.
+- Early lane changes: the banner counts the worst-case lane changes to the exit lane and starts
+  "Move right now · up to 4 lanes" early enough (400 m per change, at most one left in the final
+  500 m, plus a heads-up 1.5 km before that on motorways).
+- One layout for everything over the map (banner, a single button column on the right, cards at
+  the bottom; a side column in landscape), so nothing overlaps.
 - Lane guidance banner: maneuver, distance, and a lane strip drawn like the carriageway (dashed
   dividers, painted arrows from OSM `turn:lanes`, lanes to use highlighted).
 - "Start test drive": simulated drive from Utrecht Centraal over the A28 through Knooppunt
@@ -47,8 +52,9 @@ What works today:
 - Turn list with shields, destinations and lane advice ("Use lanes 4 & 5 of 5").
 - Places: search bar and category chips (fuel, charging, food, coffee, groceries, shops, parking,
   rest stops) from OSM. The closest few show within a second or two; while driving the search then
-  adds places along the next 40 km of the route (a few small bounding-box queries, raced over two
-  Overpass mirrors and cached for 10 minutes), in driving
+  adds places along the next 40 km of the route (a few small bounding-box queries, raced over
+  four Overpass mirrors with Photon as an independent backup, hard 9 s deadline, clear error with
+  Retry, last good answer kept as a fallback), in driving
   order with a detour estimate; opening one asks Valhalla for the exact extra time, and **Add
   stop** re-routes via it. Fuel stations show fuel types, hours, shop/toilets; chargers show
   connectors and power.

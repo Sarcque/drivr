@@ -87,15 +87,29 @@ object AppModule {
 
   /** Fixed speed cameras and average-speed sections from OSM, along the route. */
   val speedCameras: SpeedCameraClient by lazy {
-    SpeedCameraClient(OverpassClient(OkHttpClient.Builder().callTimeout(Duration.ofSeconds(60)).build()))
+    // Other mirror order and one server at a time, so these long background queries leave the
+    // main server free for the driver's own searches.
+    SpeedCameraClient(
+        OverpassClient(
+            OkHttpClient.Builder()
+                .callTimeout(Duration.ofSeconds(45))
+                .addInterceptor { chain ->
+                  chain.proceed(chain.request().newBuilder().header("User-Agent", PhotonClient.USER_AGENT).build())
+                }
+                .build(),
+            endpoints = OverpassClient.BACKGROUND_ENDPOINTS,
+            parallel = 1,
+            staggerMs = 50_000,
+        ))
   }
 
   /** Places: OSM via Overpass, typed search via Photon, official fuel prices where published. */
   val places: PlacesRepository by lazy {
     val http =
         OkHttpClient.Builder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .callTimeout(Duration.ofSeconds(12))
+            .connectTimeout(Duration.ofSeconds(4))
+            .readTimeout(Duration.ofSeconds(9))
+            .callTimeout(Duration.ofSeconds(10))
             .addInterceptor { chain ->
               // OSM services ask clients to identify themselves.
               chain.proceed(chain.request().newBuilder().header("User-Agent", PhotonClient.USER_AGENT).build())

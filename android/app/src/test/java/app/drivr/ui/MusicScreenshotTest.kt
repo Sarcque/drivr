@@ -109,13 +109,24 @@ class MusicScreenshotTest {
             secondaryContent = null, subContent = null, triggerDistanceBeforeManeuver = 400.0)
     paparazzi.snapshot {
       Map {
-        InstructionBanner(turn, 50.0, modifier = Modifier.align(Alignment.TopCenter).padding(horizontal = 12.dp, vertical = 36.dp))
-        DrivingControls({}, {}, null, {}, Modifier.align(Alignment.CenterStart).padding(start = 12.dp), initiallyOpen = true, onMusic = {})
-        Column(Modifier.align(Alignment.BottomCenter).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Card(playing)
-          TripCards(speedLimitKmh = 30, speedKmh = null, distanceRemainingM = 57_000.0, durationRemainingS = 2700.0,
-              onEnd = null, now = LocalTime.of(15, 12))
-        }
+        StackedOverlay(
+            Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 36.dp),
+            top = { InstructionBanner(turn, 50.0) },
+            buttons = { m ->
+              MapButtonColumn(
+                  listOf(MapAction("Search", MapIcon.Search) {}, MapAction("Overview", MapIcon.Overview) {}),
+                  listOf("Turn list" to {}, "Music" to {}, "Settings" to {}, "End trip" to {}),
+                  m,
+              )
+            },
+            bottom = {
+              Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Card(playing)
+                TripCards(speedLimitKmh = 30, speedKmh = null, distanceRemainingM = 57_000.0, durationRemainingS = 2700.0,
+                    onEnd = null, now = LocalTime.of(15, 12))
+              }
+            },
+        )
       }
     }
   }

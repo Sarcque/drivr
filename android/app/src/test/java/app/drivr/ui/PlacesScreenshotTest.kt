@@ -206,10 +206,15 @@ class PlacesScreenshotTest {
   }
 
   @Test
-  fun driving_controls_menu_open() {
+  fun map_buttons_fold_into_menu_when_short() {
+    // Only ~2 buttons fit: the third action folds into the "⋯" menu instead of overlapping.
     paparazzi.snapshot {
       Screen("bg_detail.png") {
-        DrivingControls({}, {}, {}, {}, modifier = Modifier.align(Alignment.CenterStart).padding(start = 12.dp), initiallyOpen = true)
+        MapButtonColumn(
+            listOf(MapAction("Search", MapIcon.Search) {}, MapAction("Overview", MapIcon.Overview) {}, MapAction("Recenter", MapIcon.Recenter) {}),
+            emptyList(),
+            Modifier.align(Alignment.CenterEnd).padding(end = 12.dp).height(120.dp),
+        )
       }
     }
   }

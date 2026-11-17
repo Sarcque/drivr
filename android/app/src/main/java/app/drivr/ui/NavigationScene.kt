@@ -25,6 +25,19 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
+import android.content.res.Configuration
+import com.stadiamaps.ferrostar.core.boundingBox
+import com.stadiamaps.ferrostar.maplibreui.NavigationMapView
+import com.stadiamaps.ferrostar.maplibreui.runtime.NavigationCameraMode
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,18 +81,24 @@ import org.maplibre.compose.map.OrnamentOptions
 import org.maplibre.compose.style.BaseStyle
 
 /**
- * Driving view camera: low and steep, like looking over the bonnet. The puck sits in the lower
- * third so most of the screen shows the road ahead.
+ * Driving view camera: low and steep, like looking over the bonnet. The car sits ~110 dp above
+ * the bottom cards, so the road ahead fills the space between the banner and the cards. The
+ * padding comes from the measured overlay, so the car is never hidden behind a card.
  */
-@Composable
-fun drivingCameraOptions(): NavigationCameraOptions {
-  val config = LocalConfiguration.current
+fun drivingCameraOptions(
+    screenHeight: Dp,
+    bottomCards: Dp,
+    startPanel: Dp = 0.dp,
+    topCards: Dp = 0.dp,
+): NavigationCameraOptions {
+  val bottom = bottomCards.coerceIn(0.dp, screenHeight * 0.6f)
+  val top = (screenHeight - bottom - 220.dp).coerceAtLeast(0.dp)
   return NavigationCameraOptions(
       browsingZoom = 15.5,
       navigationZoom = 17.6,
       navigationTilt = 60.0,
-      browsingPadding = PaddingValues(0.dp),
-      navigationPadding = PaddingValues(top = (config.screenHeightDp * 0.55f).dp),
+      browsingPadding = PaddingValues(start = startPanel, top = topCards, bottom = bottom),
+      navigationPadding = PaddingValues(start = startPanel, top = top, bottom = bottom),
   )
 }
 
@@ -127,6 +146,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   val settings by viewModel.settings.collectAsState()
   var showSettings by rememberSaveable { mutableStateOf(false) }
   androidx.activity.compose.BackHandler(enabled = showSettings) { showSettings = false }
+  androidx.activity.compose.BackHandler(enabled = showTurns) { showTurns = false }
 
   // Music: one button next to the gear while browsing; while driving only via the "..." menu,
   // and only when enabled in Settings.
@@ -153,167 +173,238 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   var arManual by rememberSaveable { mutableStateOf(false) }
   // Closing AR while it opened by itself keeps it closed for the rest of this trip.
   var arSnoozed by rememberSaveable { mutableStateOf(false) }
-  LaunchedEffect(uiState.isNavigating()) { if (!uiState.isNavigating()) arSnoozed = false }
+  val navigating = uiState.isNavigating()
+  LaunchedEffect(navigating) { if (!navigating) arSnoozed = false }
   val nearManeuver = (uiState.progress?.distanceToNextManeuver ?: Double.MAX_VALUE) < 300.0
-  val showAr = settings.arEnabled && uiState.isNavigating() && (arManual || (settings.arAuto && !arSnoozed && nearManeuver))
+  val showAr = settings.arEnabled && navigating && (arManual || (settings.arAuto && !arSnoozed && nearManeuver))
 
-  Box(Modifier.fillMaxSize()) {
-  DynamicallyOrientingNavigationView(
-      modifier = Modifier.fillMaxSize(),
-      baseStyle = rememberDrivrStyle(buildings3d = settings.buildings3d),
-      // Mute and zoom live in Settings / gestures; only Ferrostar's recenter button stays.
-      config = VisualNavigationViewConfig(showMute = false, showZoom = false),
-      routeOverlayBuilder = RouteOverlayBuilder(navigationPath = { DrivrRouteLine(it) }),
-      navigationMapState = mapState,
-      navigationCameraOptions = drivingCameraOptions(),
-      viewModel = viewModel,
-      showDefaultPuck = false,
-      mapContent = { state ->
-        if (settings.trafficOnMap) TrafficLayers(trafficEvents)
-        if (settings.speedCameras) CamerasLayer(cameraList)
-        PlacesLayer(
-            results = places.selected?.let { listOf(it) } ?: places.results,
-            selectedId = places.selected?.place?.id,
-        )
-        ChevronPuck(state)
-      },
-      views =
-          NavigationViewComponentBuilder.Default()
-              .withInstructionsView { modifier, state ->
-                state.visualInstruction?.let {
-                  InstructionBanner(
-                      instruction = it,
-                      distanceToManeuverMeters = state.progress?.distanceToNextManeuver,
-                      modifier = modifier,
-                      then = state.nextManeuver(),
-                  )
-                }
-              }
-              .withProgressView { modifier, state, onExit ->
-                state.progress?.let { progress ->
-                  // Valhalla's ETA has no live traffic; add NDW's reported delays on the route.
-                  val delayS = trafficAhead.sumOf { it.event.delaySeconds ?: 0.0 }
-                  Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (showMusic && musicAllowedNow && !places.open) musicCard(Modifier)
-                    DrivingAlert(
-                        camerasAhead.first, camerasAhead.second,
-                        if (settings.trafficAlerts) trafficAhead else emptyList())
-                    TripCards(
-                        speedLimitKmh = state.speedLimitKmh(),
-                        speedKmh = state.location?.speed?.value?.let { (it * 3.6).roundToInt() },
-                        distanceRemainingM = progress.distanceRemaining,
-                        durationRemainingS = progress.durationRemaining + delayS,
-                        trafficDelayS = delayS,
-                        onEnd = onExit,
-                    )
-                  }
-                }
-              }
-              .withCustomOverlayView { modifier ->
-                if (!uiState.isNavigating() && !places.open) {
-                  StartPanel(
-                      status = routeStatus,
-                      onDemoDrive = viewModel::startDemoDrive,
-                      modifier = modifier.align(Alignment.BottomCenter),
-                  )
-                }
-              },
-      onTapExit = { viewModel.stopNavigation() },
-      onMapLongClick = { position, _ ->
-        if (!uiState.isNavigating()) viewModel.navigateTo(position)
-        NavigationMapClickResult.Consume
-      },
-      mapOptions =
-          MapOptions(
-              ornamentOptions = OrnamentOptions(isCompassEnabled = false, isScaleBarEnabled = false)
-          ),
-  )
+  // Measured overlay sizes, so the camera keeps the car and route clear of the cards.
+  val density = LocalDensity.current
+  var topCardsH by remember { mutableStateOf(0.dp) }
+  var bottomCardsH by remember { mutableStateOf(0.dp) }
+  var sidePanelW by remember { mutableStateOf(0.dp) }
+  val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+  val inOverview = mapState.cameraMode == NavigationCameraMode.OVERVIEW
 
-  if (uiState.isNavigating() && !showAr && !places.open) {
-    DrivingControls(
-        onSearch = viewModel::openPlaces,
-        onTurns = { showTurns = !showTurns },
-        onAr = if (settings.arEnabled) ({ arManual = true }) else null,
-        onSettings = { showSettings = true },
-        modifier = Modifier.align(Alignment.CenterStart).padding(start = 12.dp),
-        onMusic = if (settings.musicWhileDriving) ({ showMusic = !showMusic }) else null,
+  fun showOverview() {
+    val box = uiState.routeGeometry?.boundingBox() ?: return
+    mapState.showRouteOverview(
+        box,
+        PaddingValues(
+            start = sidePanelW + 40.dp, end = 80.dp,
+            top = (if (landscape) 0.dp else topCardsH) + 40.dp,
+            bottom = (if (landscape) 0.dp else bottomCardsH) + 40.dp),
     )
   }
 
-  // Search bar and categories while browsing; the places sheet or a place's details when open.
-  if (!uiState.isNavigating()) {
-    Column(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        PlacesSearchBar(places.query, viewModel::searchText, onFocus = viewModel::openPlaces, modifier = Modifier.weight(1f))
-        if (!places.open) {
-          Spacer(Modifier.width(8.dp))
-          MusicButton(onClick = { showMusic = !showMusic })
-          Spacer(Modifier.width(8.dp))
-          SettingsButton(onClick = { showSettings = true })
-        }
-      }
-      if (!places.open) {
-        Spacer(Modifier.height(10.dp))
-        CategoryChips(null, viewModel::searchCategory)
-        if (showMusic) {
-          Spacer(Modifier.height(10.dp))
-          musicCard(Modifier)
-        }
-      }
+  // A new trip: show the whole route for a few seconds, then follow the car.
+  LaunchedEffect(viewModel) {
+    viewModel.routeStarted.collect {
+      kotlinx.coroutines.delay(400)
+      showOverview()
+      kotlinx.coroutines.delay(4000)
+      if (mapState.cameraMode == NavigationCameraMode.OVERVIEW) mapState.recenter(isNavigating = true)
     }
   }
-  if (places.open) {
-    val selected = places.selected
-    val sheetModifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
-    if (selected != null) {
-      PlaceDetailCard(
-          result = selected,
-          navigating = uiState.isNavigating(),
-          exactDetourS = places.exactDetourS,
-          onAddStop = { viewModel.addStop(selected.place) },
-          onDrive = { viewModel.driveTo(selected.place) },
-          onBack = { viewModel.selectPlace(null) },
-          priceCountry = places.priceCountry,
-          modifier = sheetModifier,
-      )
-    } else {
-      PlacesSheet(
-          state = places,
-          onSelectCategory = viewModel::searchCategory,
-          onSelect = viewModel::selectPlace,
-          onClose = viewModel::closePlaces,
-          priceCountry = places.priceCountry,
-          modifier = sheetModifier,
-          onRetry = viewModel::retryPlaces,
-      )
-    }
-  }
-  if (showTurns && uiState.isNavigating() && !showAr) {
-    TurnList(
-        steps = uiState.remainingSteps.orEmpty(),
-        distanceToNextManeuver = uiState.progress?.distanceToNextManeuver ?: 0.0,
-        onClose = { showTurns = false },
-        modifier = Modifier.align(Alignment.Center).padding(horizontal = 16.dp),
-    )
-  }
-  if (showSettings) {
-    SettingsScreen(
-        settings, viewModel::updateSettings, onClose = { showSettings = false },
-        musicAccess = musicState.hasAccess,
-        onMusicAccess = { context.startActivity(music.accessSettingsIntent()) },
-    )
-  }
-  if (showAr) {
-    ArJunctionView(
-        ui = uiState,
-        onClose = {
-          arManual = false
-          arSnoozed = true
+
+  BoxWithConstraints(Modifier.fillMaxSize().background(Drivr.card)) {
+    val screenH = maxHeight
+    NavigationMapView(
+        baseStyle = rememberDrivrStyle(buildings3d = settings.buildings3d),
+        navigationMapState = mapState,
+        uiState = uiState,
+        // No MapLibre ornaments: they sat under our cards. Attribution is in Settings and on the
+        // start card.
+        mapOptions = MapOptions(ornamentOptions = OrnamentOptions.AllDisabled),
+        routeOverlayBuilder = RouteOverlayBuilder(navigationPath = { DrivrRouteLine(it) }),
+        navigationCameraOptions =
+            if (landscape) drivingCameraOptions(screenH, bottomCards = 24.dp, startPanel = sidePanelW)
+            else drivingCameraOptions(screenH, bottomCards = bottomCardsH, topCards = topCardsH),
+        showDefaultPuck = false,
+        onMapLongClick = { position, _ ->
+          if (!uiState.isNavigating()) viewModel.navigateTo(position)
+          NavigationMapClickResult.Consume
+        },
+        content = { state ->
+          if (settings.trafficOnMap) TrafficLayers(trafficEvents)
+          if (settings.speedCameras) CamerasLayer(cameraList)
+          PlacesLayer(
+              results = places.selected?.let { listOf(it) } ?: places.results,
+              selectedId = places.selected?.place?.id,
+          )
+          ChevronPuck(state)
         },
     )
-  }
+
+    if (showAr) {
+      ArJunctionView(
+          ui = uiState,
+          onClose = {
+            arManual = false
+            arSnoozed = true
+          },
+      )
+      return@BoxWithConstraints
+    }
+
+    // ---- Slots: everything on top of the map lives in these, so nothing can overlap. ----------
+    val banner: @Composable (Modifier) -> Unit = { m ->
+      uiState.visualInstruction?.let {
+        InstructionBanner(
+            instruction = it,
+            distanceToManeuverMeters = uiState.progress?.distanceToNextManeuver,
+            modifier = m,
+            then = uiState.nextManeuver(),
+            stepLanes = uiState.currentStepLanes(),
+        )
+      }
+    }
+    val status: @Composable (Modifier) -> Unit = { m ->
+      RouteStatusCard(routeStatus, viewModel::retryRoute, viewModel::dismissRouteStatus, m)
+    }
+    val tripCards: @Composable (Modifier) -> Unit = { m ->
+      uiState.progress?.let { progress ->
+        // Valhalla's ETA has no live traffic; add NDW's reported delays on the route.
+        val delayS = trafficAhead.sumOf { it.event.delaySeconds ?: 0.0 }
+        Column(m, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          if (showMusic && musicAllowedNow) musicCard(Modifier)
+          DrivingAlert(
+              camerasAhead.first, camerasAhead.second,
+              if (settings.trafficAlerts) trafficAhead else emptyList())
+          TripCards(
+              speedLimitKmh = uiState.speedLimitKmh(),
+              speedKmh = uiState.location?.speed?.value?.let { (it * 3.6).roundToInt() },
+              distanceRemainingM = progress.distanceRemaining,
+              durationRemainingS = progress.durationRemaining + delayS,
+              trafficDelayS = delayS,
+              onEnd = viewModel::stopNavigation,
+          )
+        }
+      }
+    }
+    val placesPanel: @Composable (Modifier) -> Unit = { m ->
+      val selected = places.selected
+      if (selected != null) {
+        PlaceDetailCard(
+            result = selected,
+            navigating = navigating,
+            exactDetourS = places.exactDetourS,
+            onAddStop = { viewModel.addStop(selected.place) },
+            onDrive = { viewModel.driveTo(selected.place) },
+            onBack = { viewModel.selectPlace(null) },
+            priceCountry = places.priceCountry,
+            modifier = m,
+        )
+      } else {
+        PlacesSheet(
+            state = places,
+            onSelectCategory = viewModel::searchCategory,
+            onSelect = viewModel::selectPlace,
+            onClose = viewModel::closePlaces,
+            priceCountry = places.priceCountry,
+            modifier = m,
+            onRetry = viewModel::retryPlaces,
+            maxListHeight = if (landscape) 150.dp else 330.dp,
+        )
+      }
+    }
+    val buttons: @Composable (Modifier) -> Unit = { m ->
+      val primary = buildList {
+        if (navigating) add(MapAction("Search along the route", MapIcon.Search, viewModel::openPlaces))
+        if (!mapState.isTrackingUser) add(MapAction("Follow the car", MapIcon.Recenter) { mapState.recenter(navigating) })
+        else if (navigating) add(MapAction("Show the whole route", MapIcon.Overview, ::showOverview))
+      }
+      val menu = buildList<Pair<String, () -> Unit>> {
+        if (navigating) {
+          add("Turn list" to { showTurns = true })
+          if (settings.arEnabled) add("AR view" to { arManual = true })
+          if (settings.musicWhileDriving) add("Music" to { showMusic = !showMusic })
+          add("Settings" to { showSettings = true })
+          add("End trip" to viewModel::stopNavigation)
+        }
+      }
+      if (!places.open) MapButtonColumn(primary, menu, m)
+    }
+    val safe = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(12.dp)
+    if (navigating && landscape) {
+      SideOverlay(
+          safe,
+          top = {
+            if (!places.open) banner(Modifier)
+            status(Modifier)
+          },
+          buttons = buttons,
+          bottom = { if (places.open) placesPanel(Modifier) else tripCards(Modifier) },
+          onPanelWidth = { sidePanelW = it + 12.dp },
+      )
+    } else if (navigating) {
+      StackedOverlay(
+          safe,
+          top = {
+            banner(Modifier)
+            status(Modifier)
+          },
+          buttons = buttons,
+          bottom = { if (places.open) placesPanel(Modifier) else tripCards(Modifier) },
+          onTopHeight = { topCardsH = it },
+          onBottomHeight = { bottomCardsH = it },
+      )
+    } else {
+      StackedOverlay(
+          safe,
+          top = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              PlacesSearchBar(places.query, viewModel::searchText, onFocus = viewModel::openPlaces, modifier = Modifier.weight(1f))
+              if (!places.open) {
+                Spacer(Modifier.width(8.dp))
+                MusicButton(onClick = { showMusic = !showMusic })
+                Spacer(Modifier.width(8.dp))
+                SettingsButton(onClick = { showSettings = true })
+              }
+            }
+            if (!places.open) CategoryChips(null, viewModel::searchCategory)
+            if (!places.open && showMusic) musicCard(Modifier)
+            status(Modifier)
+          },
+          buttons = buttons,
+          bottom = {
+            if (places.open) placesPanel(Modifier)
+            else StartPanel(status = routeStatus, onDemoDrive = viewModel::startDemoDrive, modifier = Modifier)
+          },
+          onTopHeight = { topCardsH = it },
+          onBottomHeight = { bottomCardsH = it },
+      )
+    }
+
+    if (showTurns && navigating) {
+      // Modal: dim the map, so it reads as one layer on top rather than another floating card.
+      Box(
+          Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)).clickable { showTurns = false }
+              .windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp),
+          contentAlignment = Alignment.Center,
+      ) {
+        TurnList(
+            steps = uiState.remainingSteps.orEmpty(),
+            distanceToNextManeuver = uiState.progress?.distanceToNextManeuver ?: 0.0,
+            onClose = { showTurns = false },
+        )
+      }
+    }
+    if (showSettings) {
+      SettingsScreen(
+          settings, viewModel::updateSettings, onClose = { showSettings = false },
+          musicAccess = musicState.hasAccess,
+          onMusicAccess = { context.startActivity(music.accessSettingsIntent()) },
+      )
+    }
   }
 }
+
+/** Lanes for the current maneuver from any of the step's banners (often only the last has them). */
+private fun NavigationUiState.currentStepLanes(): List<uniffi.ferrostar.LaneInfo>? =
+    remainingSteps?.firstOrNull()?.visualInstructions
+        ?.mapNotNull { (it.subContent?.laneInfo ?: it.primaryContent.laneInfo)?.takeIf { l -> l.isNotEmpty() } }
+        ?.lastOrNull()
 
 /** The maneuver after the current one, for the "Then" row. */
 private fun NavigationUiState.nextManeuver(): VisualInstructionContent? =
@@ -334,8 +425,6 @@ internal fun StartPanel(status: RouteStatus, onDemoDrive: () -> Unit, modifier: 
   Row(
       modifier =
           modifier
-              .navigationBarsPadding()
-              .padding(12.dp)
               .fillMaxWidth()
               .clip(RoundedCornerShape(20.dp))
               .background(Drivr.card)
@@ -344,10 +433,10 @@ internal fun StartPanel(status: RouteStatus, onDemoDrive: () -> Unit, modifier: 
   ) {
     Column(Modifier.weight(1f)) {
       when (status) {
-        is RouteStatus.Failed -> Text(status.message, color = Color(0xFFFF8A80), fontSize = 14.sp, maxLines = 2)
         else -> {
           Text("Long-press the map to go there", color = Drivr.text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
           Text("or try a simulated drive", color = Drivr.textMuted, fontSize = 13.sp)
+          Text("© OpenStreetMap contributors", color = Drivr.textMuted, fontSize = 10.sp)
         }
       }
     }

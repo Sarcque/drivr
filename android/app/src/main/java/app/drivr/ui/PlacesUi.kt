@@ -541,54 +541,6 @@ private fun BigButton(text: String, primary: Boolean, onClick: () -> Unit, modif
 
 // ---- Driving controls ---------------------------------------------------------------------------
 
-/**
- * While driving: two round buttons on the left edge (Ferrostar's own recenter button lives on the
- * right, so they never overlap). Search opens stops along the route; the second opens a small
- * menu with the turn list, AR view (when enabled in settings) and Settings.
- */
-@Composable
-fun DrivingControls(
-    onSearch: () -> Unit,
-    onTurns: () -> Unit,
-    onAr: (() -> Unit)?,
-    onSettings: () -> Unit,
-    modifier: Modifier = Modifier,
-    initiallyOpen: Boolean = false,
-    onMusic: (() -> Unit)? = null,
-) {
-  var open by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(initiallyOpen) }
-  Column(modifier, horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    RoundButton(onSearch) { SearchGlyph(Drivr.text) }
-    RoundButton({ open = !open }) {
-      Canvas(Modifier.size(18.dp)) {
-        listOf(0.2f, 0.5f, 0.8f).forEach { drawCircle(Drivr.text, 2.dp.toPx(), Offset(size.width * it, size.height / 2)) }
-      }
-    }
-    if (open) {
-      Column(Modifier.clip(RoundedCornerShape(16.dp)).background(Drivr.card).padding(vertical = 4.dp)) {
-        MenuItem("Turn list") { open = false; onTurns() }
-        if (onAr != null) MenuItem("AR view") { open = false; onAr() }
-        if (onMusic != null) MenuItem("Music") { open = false; onMusic() }
-        MenuItem("Settings") { open = false; onSettings() }
-      }
-    }
-  }
-}
-
-@Composable
-private fun RoundButton(onClick: () -> Unit, content: @Composable () -> Unit) {
-  Box(
-      Modifier.size(52.dp).clip(CircleShape).background(Drivr.card).clickable(onClick = onClick),
-      contentAlignment = Alignment.Center,
-  ) { content() }
-}
-
-@Composable
-private fun MenuItem(text: String, onClick: () -> Unit) {
-  Text(text, color = Drivr.text, fontSize = 15.sp,
-      modifier = Modifier.clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 11.dp))
-}
-
 @Composable
 fun SearchGlyph(color: Color, modifier: Modifier = Modifier.size(20.dp)) {
   Canvas(modifier) {
