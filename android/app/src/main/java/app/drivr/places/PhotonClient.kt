@@ -16,25 +16,70 @@ class PhotonClient(
     private val baseUrl: String = "https://photon.komoot.io/api/",
 ) {
   fun search(query: String, near: LatLng?, limit: Int = 15): List<Place> {
-    val url =
-        baseUrl.toHttpUrl().newBuilder().apply {
-          addQueryParameter("q", query)
-          addQueryParameter("limit", limit.toString())
-          near?.let {
-            addQueryParameter("lat", String.format(Locale.ROOT, "%.5f", it.lat))
-            addQueryParameter("lon", String.format(Locale.ROOT, "%.5f", it.lon))
-          }
-          // Photon supports default/en/de/fr; "default" gives local names (Dutch in NL).
-          val lang = Locale.getDefault().language
-          if (lang in setOf("en", "de", "fr")) addQueryParameter("lang", lang)
-        }.build()
-    http.newCall(Request.Builder().url(url).header("User-Agent", USER_AGENT).build()).execute().use {
+    http.newCall(Request.Builder().url(searchUrl(query, near, limit)).header("User-Agent", USER_AGENT).build()).execute().use {
       check(it.isSuccessful) { "Search HTTP ${it.code}" }
       return parse(it.body.string())
     }
   }
 
+  private fun searchUrl(query: String, near: LatLng?, limit: Int) =
+      baseUrl.toHttpUrl().newBuilder().apply {
+        addQueryParameter("q", query)
+        addQueryParameter("limit", limit.toString())
+        near?.let {
+          addQueryParameter("lat", String.format(Locale.ROOT, "%.5f", it.lat))
+          addQueryParameter("lon", String.format(Locale.ROOT, "%.5f", it.lon))
+        }
+        // Photon supports default/en/de/fr; "default" gives local names (Dutch in NL).
+        val lang = Locale.getDefault().language
+        if (lang in setOf("en", "de", "fr")) addQueryParameter("lang", lang)
+      }.build()
+
+  /**
+   * Places of a category around a point, from Photon's reverse geocoder filtered by OSM tag. A
+   * second, independent source next to Overpass: a different server, usually answering in well
+   * under a second. Results carry only the main tag (no fuel types or opening hours).
+   */
+  suspend fun nearby(category: PlaceCategory, at: LatLng, radiusKm: Double, limit: Int = 20): List<Place> {
+    val url =
+        reverseUrl().newBuilder().apply {
+          addQueryParameter("lat", String.format(Locale.ROOT, "%.5f", at.lat))
+          addQueryParameter("lon", String.format(Locale.ROOT, "%.5f", at.lon))
+          addQueryParameter("radius", String.format(Locale.ROOT, "%.1f", radiusKm))
+          addQueryParameter("limit", limit.toString())
+          osmTags(category).forEach { addQueryParameter("osm_tag", it) }
+        }.build()
+    return http.newCall(Request.Builder().url(url).header("User-Agent", USER_AGENT).build()).await {
+      if (!it.isSuccessful) throw PlacesException.http(it.code, url.toString())
+      parse(it.body.string()).filter { p -> p.category == category || category == PlaceCategory.SHOPS }
+    }
+  }
+
+  private fun reverseUrl() = baseUrl.removeSuffix("/").removeSuffix("api").removeSuffix("/").plus("/reverse").toHttpUrl()
+
+  /** Typed search without blocking a thread. */
+  suspend fun searchAsync(query: String, near: LatLng?, limit: Int = 15): List<Place> {
+    val call = http.newCall(Request.Builder().url(searchUrl(query, near, limit)).header("User-Agent", USER_AGENT).build())
+    return call.await {
+      if (!it.isSuccessful) throw PlacesException.http(it.code, baseUrl)
+      parse(it.body.string())
+    }
+  }
+
   companion object {
+    /** Photon `osm_tag` filters (key:value) for each category. */
+    fun osmTags(category: PlaceCategory): List<String> =
+        when (category) {
+          PlaceCategory.FUEL -> listOf("amenity:fuel")
+          PlaceCategory.CHARGING -> listOf("amenity:charging_station")
+          PlaceCategory.FOOD -> listOf("amenity:restaurant", "amenity:fast_food")
+          PlaceCategory.COFFEE -> listOf("amenity:cafe")
+          PlaceCategory.GROCERIES -> listOf("shop:supermarket", "shop:convenience")
+          PlaceCategory.SHOPS -> listOf("shop:mall", "shop:department_store", "shop:bakery", "shop:chemist", "shop:doityourself", "shop:hardware", "shop:electronics")
+          PlaceCategory.PARKING -> listOf("amenity:parking")
+          PlaceCategory.REST -> listOf("highway:services", "highway:rest_area", "amenity:toilets")
+        }
+
     const val USER_AGENT = "Drivr/0.2 (open-source navigation)"
 
     fun parse(json: String): List<Place> {

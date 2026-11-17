@@ -1,6 +1,12 @@
 package app.drivr.places
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -31,16 +37,24 @@ class PlacesRepository(
     private val overpass: OverpassClient,
     private val photon: PhotonClient,
     private val prices: FuelPriceRepository,
+    /** Last good nearby answer per category and ~1 km cell, kept 2 h as a fallback when offline. */
+    private val lastGood: TtlCache<String, List<Place>> = TtlCache(ttlMs = 2 * 3600_000L, maxEntries = 60),
+    /** Fresh answers reused without asking again. */
+    private val fresh: TtlCache<String, List<Place>> = TtlCache(ttlMs = 5 * 60_000L, maxEntries = 60),
 ) {
   /** The country whose official price feed covers [at], or null where none exists (e.g. NL). */
   fun priceCountry(at: LatLng): String? = prices.sourceFor(at)?.country
 
   /**
-   * Places of a category in two steps, so the driver sees something within a second or two:
-   * 1. A few places within ~3 km of the car (small, fast query), with route info where they fit.
-   * 2. When navigating: the next [aheadM] of the route, as a few bounding boxes, filtered to the
-   *    corridor and merged in driving order. If step 2 fails, step 1's results stay.
-   * Not navigating and nothing close: one wider nearby search.
+   * Places of a category in steps, so the driver sees something within a second or two and is
+   * never left with an endless spinner:
+   * 1. Cached places for this spot, at once, if any.
+   * 2. Places within a few km of the car: Overpass (mirrors raced) and Photon (a separate server)
+   *    race; the first useful answer wins. Hard deadline ~9 s, then a clear error, or the last
+   *    good answer for this spot with a note.
+   * 3. When navigating: the next [aheadM] of the route, as a few bounding boxes, filtered to the
+   *    corridor and merged in driving order. If step 3 fails, the earlier results stay.
+   * Not navigating and little close by: one wider nearby search, also optional.
    */
   fun byCategory(
       category: PlaceCategory,
@@ -51,31 +65,76 @@ class PlacesRepository(
     val corridor = corridorFor(category).toDouble()
     val nearRadius = if (category == PlaceCategory.PARKING) 1000 else 3000
     val navigating = route != null && route.size >= 2
-    val near =
-        runCatching { overpass.nearby(category, here, nearRadius, limit = 20) }
-            .getOrElse { e -> if (!navigating) throw e else emptyList() }
+    val key = cellKey(category, here, nearRadius)
+
+    val near: List<Place> =
+        fresh[key] ?: run {
+          lastGood[key]?.let { emit(PlacesUpdate(rankNearby(it, here, route, corridor), done = false)) }
+          try {
+            nearbyAnySource(category, here, nearRadius).also {
+              fresh[key] = it
+              lastGood[key] = it
+            }
+          } catch (e: CancellationException) {
+            throw e
+          } catch (e: Exception) {
+            val stale = lastGood[key]
+            when {
+              stale != null -> {
+                emit(PlacesUpdate(rankNearby(stale, here, route, corridor), done = true,
+                    note = "Showing earlier results: ${PlacesException.reason(e)}"))
+                return@flow
+              }
+              navigating -> emptyList()
+              else -> throw e
+            }
+          }
+        }
     val nearRanked = rankNearby(near, here, route, corridor)
     if (!navigating) {
       if (nearRanked.size >= 3) {
         emit(PlacesUpdate(nearRanked, done = true))
       } else {
         emit(PlacesUpdate(nearRanked, done = false))
-        val wide = overpass.nearby(category, here, 10_000, limit = 20)
-        emit(PlacesUpdate(rankNearby(wide, here, null, corridor), done = true))
+        val wide = runCatchingNonCancel { nearbyAnySource(category, here, 10_000) }
+        emit(
+            wide.fold(
+                { PlacesUpdate(rankNearby(near + it, here, null, corridor), done = true) },
+                { PlacesUpdate(nearRanked, done = true, note = if (nearRanked.isEmpty()) "Nothing found within 3 km; the wider search failed (${PlacesException.reason(it)})" else null) },
+            ))
       }
       return@flow
     }
     emit(PlacesUpdate(nearRanked, done = false))
     val boxes = RouteCorridor(route!!).boxes(0.0, aheadM, padM = corridor)
-    val along = runCatching { overpass.inBoxes(category, boxes) }
+    val along = runCatchingNonCancel { overpass.inBoxes(category, boxes, deadlineMs = 12_000) }
     along.onSuccess { found ->
       val merged = rank(near + found, here, route, corridor)
       emit(PlacesUpdate(merged, done = true))
     }
     along.onFailure {
-      emit(PlacesUpdate(nearRanked, done = true, note = "Showing places near you; the route search timed out."))
+      emit(PlacesUpdate(nearRanked, done = true, note = "Showing places near you; the route search failed (${PlacesException.reason(it)})."))
     }
   }.flowOn(Dispatchers.IO)
+
+  /**
+   * Nearby places from whichever source answers first with something useful: Overpass (full
+   * details) right away, Photon after a short head start (or at once if Overpass already failed).
+   * An empty answer only counts once every source has answered.
+   */
+  private suspend fun nearbyAnySource(category: PlaceCategory, here: LatLng, radiusM: Int): List<Place> =
+      withTimeoutOrNull(NEARBY_DEADLINE_MS) {
+        val fromOverpass: suspend () -> List<Place> = {
+          overpass.nearby(category, here, radiusM, limit = 20, deadlineMs = 8_000)
+        }
+        val fromPhoton: suspend () -> List<Place> = {
+          photon.nearby(category, here, radiusKm = radiusM / 1000.0, limit = 20)
+        }
+        firstUseful(
+            listOf(0L to fromOverpass, PHOTON_HEAD_START_MS to fromPhoton),
+            useful = { it.isNotEmpty() },
+        )
+      } ?: throw PlacesException("No answer within ${NEARBY_DEADLINE_MS / 1000} s")
 
   /** Near the car: on-route places first (in driving order), then the rest by distance. */
   private fun rankNearby(places: List<Place>, here: LatLng, route: List<LatLng>?, corridorM: Double): List<PlaceResult> {
@@ -89,7 +148,9 @@ class PlacesRepository(
   /** Typed search ("Albert Heijn", "IKEA"), biased to the car's position. */
   suspend fun search(text: String, here: LatLng, route: List<LatLng>?): List<PlaceResult> =
       withContext(Dispatchers.IO) {
-        val places = photon.search(text, here)
+        val places =
+            withTimeoutOrNull(8_000) { photon.searchAsync(text, here) }
+                ?: throw PlacesException("Search took longer than 8 s")
         // Typed searches can be anywhere, so keep everything; just add route info where it fits.
         rank(places, here, route, corridorM = null)
       }
@@ -106,12 +167,67 @@ class PlacesRepository(
   }
 
   companion object {
+    const val NEARBY_DEADLINE_MS = 9_000L
+    const val PHOTON_HEAD_START_MS = 2_000L
+
     fun corridorFor(category: PlaceCategory): Int =
         when (category) {
           PlaceCategory.FUEL, PlaceCategory.CHARGING, PlaceCategory.REST -> 2000
           PlaceCategory.PARKING -> 600
           else -> 1200
         }
+
+    /** Cache key: category, radius and a ~1 km grid cell, so small moves reuse the answer. */
+    fun cellKey(category: PlaceCategory, at: LatLng, radiusM: Int): String =
+        "${category.name}/$radiusM/${Math.round(at.lat * 100)}/${Math.round(at.lon * 60)}"
+  }
+}
+
+/** runCatching that never swallows cancellation. */
+inline fun <T> runCatchingNonCancel(block: () -> T): Result<T> =
+    try {
+      Result.success(block())
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      Result.failure(e)
+    }
+
+/**
+ * Runs [sources] (each after its head start, or at once when every earlier one has finished) and
+ * returns the first result that is [useful]. If none is, returns the first result that came back
+ * at all; if every source failed, throws one [PlacesException] naming the causes.
+ */
+suspend fun <T> firstUseful(sources: List<Pair<Long, suspend () -> T>>, useful: (T) -> Boolean): T = coroutineScope {
+  val winner = CompletableDeferred<T>()
+  val finished = java.util.concurrent.atomic.AtomicInteger(0)
+  val errors = java.util.concurrent.ConcurrentLinkedQueue<Exception>()
+  val fallback = java.util.concurrent.atomic.AtomicReference<Pair<T, Int>?>(null)
+  fun settleIfAllDone() {
+    if (finished.incrementAndGet() < sources.size) return
+    val fb = fallback.get()
+    if (fb != null) winner.complete(fb.first) else winner.completeExceptionally(PlacesException.from(errors.toList()))
+  }
+  val jobs =
+      sources.mapIndexed { i, (headStartMs, run) ->
+        launch {
+          if (headStartMs > 0) withTimeoutOrNull(headStartMs) { while (finished.get() < i) delay(50) }
+          if (winner.isCompleted) return@launch
+          try {
+            val r = run()
+            if (useful(r)) winner.complete(r) else fallback.compareAndSet(null, r to i)
+          } catch (e: CancellationException) {
+            throw e
+          } catch (e: Exception) {
+            errors += e
+          }
+          settleIfAllDone()
+        }
+      }
+  try {
+    winner.await()
+  } finally {
+    jobs.forEach { it.cancel() }
   }
 }
 

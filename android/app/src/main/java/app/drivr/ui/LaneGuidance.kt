@@ -28,17 +28,97 @@ import uniffi.ferrostar.LaneInfo
  * use in white with a blue bar underneath, the others in grey. Followed by a short hint.
  */
 @Composable
-fun LaneGuidanceStrip(lanes: List<LaneInfo>, modifier: Modifier = Modifier) {
+fun LaneGuidanceStrip(
+    lanes: List<LaneInfo>,
+    modifier: Modifier = Modifier,
+    distanceToManeuverM: Double? = null,
+    motorway: Boolean = false,
+) {
   if (lanes.isEmpty()) return
   val laneWidth = if (lanes.size > 5) 34.dp else 42.dp
+  val advice = laneAdvice(lanes, distanceToManeuverM, motorway)
   Row(modifier, verticalAlignment = Alignment.CenterVertically) {
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
       lanes.forEach { LaneArrowCell(it, Modifier.width(laneWidth)) }
     }
-    laneHint(lanes)?.let {
+    advice?.let {
       Spacer(Modifier.width(14.dp))
-      Text(it, color = Drivr.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+      Text(
+          it.text,
+          color = if (it.urgent) LaneColors.urgent else Drivr.text,
+          fontSize = 15.sp,
+          fontWeight = FontWeight.SemiBold,
+      )
     }
+  }
+}
+
+object LaneColors {
+  val urgent = androidx.compose.ui.graphics.Color(0xFFFFB020)
+}
+
+/** What the lane strip says next to the arrows, and whether it's a "do it now" prompt. */
+data class LaneAdvice(val text: String, val urgent: Boolean)
+
+/** Metres of road a driver needs per lane change, unhurried, at motorway speed. */
+const val METRES_PER_LANE_CHANGE = 400.0
+
+/** The last stretch before the maneuver, where at most one lane change should be left. */
+const val FINAL_STRETCH_M = 500.0
+
+/** Extra warning before the "move now" point on motorways, so nobody is surprised. */
+const val MOTORWAY_HEADS_UP_M = 1500.0
+
+/**
+ * The most lane changes the driver may need: from the lane furthest from a usable one. The phone
+ * can't tell which lane the car is in, so plan for the worst case (e.g. leftmost lane to a
+ * right-hand exit lane = 4 changes on a 5-lane road).
+ */
+fun laneChangesNeeded(lanes: List<LaneInfo>): Int {
+  val active = lanes.indices.filter { lanes[it].active }
+  if (active.isEmpty() || active.size == lanes.size) return 0
+  return lanes.indices.filter { it !in active }.maxOf { i -> active.minOf { kotlin.math.abs(it - i) } }
+}
+
+/**
+ * Where to start moving over: one change per [METRES_PER_LANE_CHANGE], all but one done before
+ * the final [FINAL_STRETCH_M], plus one change's worth of slack for traffic. Three changes →
+ * start 1.7 km out (500 + 2 × 400 + 400).
+ */
+fun laneChangeStartM(changes: Int): Double =
+    if (changes <= 0) 0.0 else FINAL_STRETCH_M + changes * METRES_PER_LANE_CHANGE
+
+/**
+ * Progressive lane advice, so nobody has to cross three lanes in the last few hundred metres:
+ * - far out on a motorway: a heads-up ("Keep right soon: up to 3 lane changes");
+ * - from [laneChangeStartM]: "Move right now · up to 3 lanes" (urgent colour);
+ * - in the final stretch: "Use the right lane".
+ */
+fun laneAdvice(lanes: List<LaneInfo>, distanceM: Double?, motorway: Boolean): LaneAdvice? {
+  val hint = laneHint(lanes) ?: return null
+  val changes = laneChangesNeeded(lanes)
+  if (distanceM == null || changes == 0) return LaneAdvice(hint, urgent = false)
+  val side = laneSide(lanes)
+  val start = laneChangeStartM(changes)
+  val lanesWord = if (changes == 1) "1 lane" else "up to $changes lanes"
+  return when {
+    distanceM <= FINAL_STRETCH_M -> LaneAdvice(hint, urgent = changes > 1)
+    distanceM <= start ->
+        LaneAdvice(if (side != null) "Move $side now · $lanesWord" else "Change lanes now · $lanesWord", urgent = true)
+    motorway && distanceM <= start + MOTORWAY_HEADS_UP_M ->
+        LaneAdvice(if (side != null) "Keep $side soon · $lanesWord" else "Prepare to change lanes · $lanesWord", urgent = false)
+    else -> LaneAdvice(hint, urgent = false)
+  }
+}
+
+/** "right" when the usable lanes are all on the right, "left" for the left, else null. */
+fun laneSide(lanes: List<LaneInfo>): String? {
+  val active = lanes.indices.filter { lanes[it].active }
+  if (active.isEmpty()) return null
+  return when {
+    active.last() == lanes.lastIndex && active.first() > 0 -> "right"
+    active.first() == 0 && active.last() < lanes.lastIndex -> "left"
+    else -> null
   }
 }
 
