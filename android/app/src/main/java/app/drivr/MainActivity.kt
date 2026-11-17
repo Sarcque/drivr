@@ -33,6 +33,12 @@ class MainActivity : ComponentActivity(), AndroidTtsStatusListener {
     AppModule.ttsObserver.start()
   }
 
+  override fun onResume() {
+    super.onResume()
+    // Picks up notification access granted in system settings, and the current player.
+    AppModule.music.refresh()
+  }
+
   override fun onDestroy() {
     super.onDestroy()
     AppModule.ttsObserver.shutdown()

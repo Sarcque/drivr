@@ -554,6 +554,7 @@ fun DrivingControls(
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
     initiallyOpen: Boolean = false,
+    onMusic: (() -> Unit)? = null,
 ) {
   var open by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(initiallyOpen) }
   Column(modifier, horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -567,6 +568,7 @@ fun DrivingControls(
       Column(Modifier.clip(RoundedCornerShape(16.dp)).background(Drivr.card).padding(vertical = 4.dp)) {
         MenuItem("Turn list") { open = false; onTurns() }
         if (onAr != null) MenuItem("AR view") { open = false; onAr() }
+        if (onMusic != null) MenuItem("Music") { open = false; onMusic() }
         MenuItem("Settings") { open = false; onSettings() }
       }
     }

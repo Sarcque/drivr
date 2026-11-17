@@ -34,7 +34,14 @@ import app.drivr.settings.Units
 
 /** Settings: the switches that used to sit on the map, plus map and alert options. */
 @Composable
-fun SettingsScreen(settings: Settings, onChange: ((Settings) -> Settings) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun SettingsScreen(
+    settings: Settings,
+    onChange: ((Settings) -> Settings) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    musicAccess: Boolean = false,
+    onMusicAccess: () -> Unit = {},
+) {
   Column(modifier.fillMaxSize().background(Color(0xFF0E1013)).statusBarsPadding().navigationBarsPadding()) {
     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
       Text("Settings", color = Drivr.text, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -50,6 +57,17 @@ fun SettingsScreen(settings: Settings, onChange: ((Settings) -> Settings) -> Uni
       Section("Alerts") {
         Toggle("Speed cameras", "Fixed cameras and average-speed checks from OpenStreetMap", settings.speedCameras) { v -> onChange { it.copy(speedCameras = v) } }
         Toggle("Traffic alerts", "Jams, accidents and closures ahead (NDW, Netherlands)", settings.trafficAlerts) { v -> onChange { it.copy(trafficAlerts = v) } }
+      }
+      Section("Music") {
+        Toggle("Music controls while driving", "Adds Music to the driving menu; the card stays hidden until you open it",
+            settings.musicWhileDriving) { v -> onChange { it.copy(musicWhileDriving = v) } }
+        Row(Modifier.fillMaxWidth().clickable(onClick = onMusicAccess).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+          Column(Modifier.weight(1f)) {
+            Text("Access to your music player", color = Drivr.text, fontSize = 16.sp)
+            Text("Spotify, YouTube Music and others. No login needed", color = Drivr.textMuted, fontSize = 13.sp)
+          }
+          Text(if (musicAccess) "On" else "Allow", color = if (musicAccess) Drivr.ok else Drivr.accent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        }
       }
       Section("Map") {
         Toggle("Traffic on the map", "Colour jams and show incidents", settings.trafficOnMap) { v -> onChange { it.copy(trafficOnMap = v) } }
