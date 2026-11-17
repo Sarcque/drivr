@@ -34,6 +34,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flowOf
@@ -48,9 +51,9 @@ import uniffi.ferrostar.WaypointKind
 sealed interface RouteStatus {
   data object Idle : RouteStatus
 
-  data object Loading : RouteStatus
+  data class Loading(val message: String = "Finding a route…") : RouteStatus
 
-  data class Failed(val message: String) : RouteStatus
+  data class Failed(val message: String, val canRetry: Boolean = true) : RouteStatus
 }
 
 /** The places panel: what was asked, what came back, and which place is open. */
@@ -87,6 +90,10 @@ class DrivrViewModel(
 
   private val hasLocationPermission = MutableStateFlow(false)
   private val browsingLocation = MutableStateFlow<UserLocation?>(DemoRoute.origin)
+  /** The phone's own GPS fix; null until the first one arrives (the map shows the demo spot). */
+  private val liveFix = MutableStateFlow<UserLocation?>(null)
+  /** The last route request, so a failed one can be retried with one tap. */
+  private var lastRequest: (() -> Unit)? = null
 
   private val _routeStatus = MutableStateFlow<RouteStatus>(RouteStatus.Idle)
   val routeStatus = _routeStatus.asStateFlow()
@@ -156,7 +163,10 @@ class DrivrViewModel(
             if (granted) locationProvider.locationUpdates(2000L).map { it.toUserLocation() }
             else flowOf(DemoRoute.origin)
           }
-          .collect { browsingLocation.value = it }
+          .collect {
+            browsingLocation.value = it
+            if (hasLocationPermission.value) liveFix.value = it
+          }
     }
   }
 
@@ -180,18 +190,40 @@ class DrivrViewModel(
   }
 
   /** Simulated drive along the demo route; works without GPS or permissions. */
-  fun startDemoDrive() =
-      navigate(
-          from = DemoRoute.origin,
-          to = DemoRoute.destination,
-          name = DemoRoute.destinationName,
-          simulate = true,
-      )
+  fun startDemoDrive() {
+    lastRequest = ::startDemoDrive
+    navigate(
+        from = DemoRoute.origin,
+        to = DemoRoute.destination,
+        name = DemoRoute.destinationName,
+        simulate = true,
+    )
+  }
 
   /** Real navigation from the current location. */
-  fun navigateTo(destination: GeographicCoordinate) {
-    val here = browsingLocation.value ?: return
-    navigate(from = here, to = destination, name = null, simulate = false)
+  fun navigateTo(destination: GeographicCoordinate) = routeFromHere(destination, name = null)
+
+  /**
+   * Routes from where the phone really is. Waits (up to 20 s) for the first GPS fix instead of
+   * routing from the demo start in Utrecht, which used to give a route far away from the car.
+   */
+  private fun routeFromHere(to: GeographicCoordinate, name: String?, stops: List<Place> = emptyList(), simulate: Boolean = false) {
+    lastRequest = { routeFromHere(to, name, stops, simulate) }
+    viewModelScope.launch {
+      val from =
+          if (simulate || !hasLocationPermission.value) browsingLocation.value
+          else
+              liveFix.value
+                  ?: run {
+                    _routeStatus.value = RouteStatus.Loading("Waiting for GPS…")
+                    withTimeoutOrNull(20_000) { liveFix.filterNotNull().first() }
+                  }
+      if (from == null) {
+        _routeStatus.value = RouteStatus.Failed("No GPS fix yet. Go outside or near a window and try again.")
+        return@launch
+      }
+      navigate(from, to, name, simulate, stops)
+    }
   }
 
   private fun navigate(
@@ -201,13 +233,24 @@ class DrivrViewModel(
       simulate: Boolean,
       stops: List<Place> = emptyList(),
   ) {
-    _routeStatus.value = RouteStatus.Loading
+    _routeStatus.value = RouteStatus.Loading()
     viewModelScope.launch(Dispatchers.IO) {
       try {
         val dest = Waypoint(coordinate = to, kind = WaypointKind.BREAK)
         val waypoints = stops.map { it.waypoint() } + dest
-        val routes = core.getRoutes(from, waypoints)
-        val route = routes.first()
+        // One quiet retry: the free routing server sometimes drops a request.
+        val routes =
+            runCatching { core.getRoutes(from, waypoints) }
+                .recoverCatching {
+                  if (it is kotlinx.coroutines.CancellationException) throw it
+                  Log.w(TAG, "Routing failed once, retrying", it)
+                  kotlinx.coroutines.delay(1500)
+                  core.getRoutes(from, waypoints)
+                }
+                .getOrThrow()
+        val route = routes.firstOrNull() ?: error("No route found to this place")
+        check(route.geometry.size >= 2) { "The route came back without a line" }
+        Log.i(TAG, "Route: ${route.geometry.size} points, ${route.distance.toInt()} m")
         if (simulate) locationProvider.enableSimulationOn(route)
         else locationProvider.disableSimulation()
         core.startNavigation(route = route)
@@ -217,10 +260,35 @@ class DrivrViewModel(
         simulating = simulate
         _places.value = _places.value.copy(stops = stops)
         _routeStatus.value = RouteStatus.Idle
+        _routeStarted.tryEmit(Unit)
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
       } catch (e: Exception) {
         Log.e(TAG, "Routing failed", e)
-        _routeStatus.value = RouteStatus.Failed(e.message ?: "Routing failed")
+        _routeStatus.value = RouteStatus.Failed(routingError(e))
       }
+    }
+  }
+
+  /** Fires when a new trip starts, so the map can show the whole route for a moment. */
+  private val _routeStarted = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+  val routeStarted: kotlinx.coroutines.flow.SharedFlow<Unit> = _routeStarted
+
+  fun retryRoute() {
+    lastRequest?.invoke()
+  }
+
+  fun dismissRouteStatus() {
+    _routeStatus.value = RouteStatus.Idle
+  }
+
+  private fun routingError(e: Exception): String {
+    val chain = generateSequence(e as Throwable) { it.cause }.toList()
+    return when {
+      chain.any { it is java.net.UnknownHostException } -> "No internet connection, so no route."
+      chain.any { it is java.net.SocketTimeoutException || it is java.io.InterruptedIOException } ->
+          "The routing server took too long. Try again."
+      else -> "Couldn't find a route: ${e.message ?: e.javaClass.simpleName}"
     }
   }
 
@@ -254,7 +322,7 @@ class DrivrViewModel(
   /** A search that shows the first close results right away and refines them as more arrive. */
   private fun loadProgressive(source: (LatLng, List<LatLng>?) -> kotlinx.coroutines.flow.Flow<PlacesUpdate>) {
     placesJob?.cancel()
-    val here = here() ?: return
+    val here = here() ?: return noLocationYet()
     val route = routeAhead()
     _places.value =
         _places.value.copy(
@@ -274,10 +342,18 @@ class DrivrViewModel(
             _places.value =
                 _places.value.copy(
                     loading = false, refining = false,
-                    error = "The map server didn't answer in time. Check your connection and try again.")
+                    error = placesError(e))
           }
         }
   }
+
+  private fun noLocationYet() {
+    _places.value = _places.value.copy(loading = false, error = "Waiting for your location. Try again in a moment.")
+  }
+
+  /** What went wrong, in words a driver can act on. */
+  private fun placesError(e: Exception): String =
+      "Couldn't load places: " + app.drivr.places.PlacesException.reason(e) + ". Tap Try again."
 
   /** Runs the last search again (after an error). */
   fun retryPlaces() {
@@ -296,7 +372,7 @@ class DrivrViewModel(
 
   private fun load(debounceMs: Long = 0, block: suspend (LatLng, List<LatLng>?) -> List<PlaceResult>) {
     placesJob?.cancel()
-    val here = here() ?: return
+    val here = here() ?: return noLocationYet()
     val route = routeAhead()
     _places.value =
         _places.value.copy(
@@ -312,7 +388,7 @@ class DrivrViewModel(
           } catch (e: Exception) {
             Log.w(TAG, "Places search failed", e)
             _places.value =
-                _places.value.copy(loading = false, error = "Search didn't answer in time. Check your connection and try again.")
+                _places.value.copy(loading = false, error = placesError(e))
           }
         }
   }
@@ -338,9 +414,15 @@ class DrivrViewModel(
 
   /** Drive straight to a place (replaces the current trip). */
   fun driveTo(place: Place) {
-    val from = super.navigationUiState.value.location ?: browsingLocation.value ?: return
+    val navigatingFrom = super.navigationUiState.value.location
     closePlaces()
-    navigate(from, GeographicCoordinate(place.lat, place.lon), place.name, simulate = simulating)
+    val to = GeographicCoordinate(place.lat, place.lon)
+    if (navigatingFrom != null && super.navigationUiState.value.isNavigating()) {
+      lastRequest = { driveTo(place) }
+      navigate(navigatingFrom, to, place.name, simulate = simulating)
+    } else {
+      routeFromHere(to, place.name)
+    }
   }
 
   /** Add a stop before the destination and re-route; the trip carries on afterwards. */
@@ -349,6 +431,7 @@ class DrivrViewModel(
     val from = super.navigationUiState.value.location ?: return
     val stops = _places.value.stops + place
     closePlaces()
+    lastRequest = { navigate(from, dest.coordinate, destinationName, simulate = simulating, stops = stops) }
     navigate(from, dest.coordinate, destinationName, simulate = simulating, stops = stops)
   }
 
@@ -361,6 +444,8 @@ class DrivrViewModel(
 
   override fun stopNavigation() {
     destination = null
+    simulating = false
+    _routeStatus.value = RouteStatus.Idle
     _places.value = PlacesState()
     locationProvider.disableSimulation()
     core.stopNavigation()

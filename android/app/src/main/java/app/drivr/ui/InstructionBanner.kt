@@ -44,9 +44,14 @@ fun InstructionBanner(
     distanceToManeuverMeters: Double?,
     modifier: Modifier = Modifier,
     then: VisualInstructionContent? = null,
+    /** Lanes for this maneuver from any of the step's banners, so they show from the start. */
+    stepLanes: List<LaneInfo>? = null,
 ) {
   val primary = instruction.primaryContent
-  val lanes: List<LaneInfo> = instruction.subContent?.laneInfo ?: primary.laneInfo ?: emptyList()
+  val lanes: List<LaneInfo> =
+      (instruction.subContent?.laneInfo ?: primary.laneInfo)?.takeIf { it.isNotEmpty() } ?: stepLanes ?: emptyList()
+  val motorway =
+      primary.maneuverType == ManeuverType.OFF_RAMP || primary.maneuverType == ManeuverType.FORK || lanes.size >= 3
   val sign = parseSignText(primary.text)
   val action = actionPhrase(primary.maneuverType, primary.maneuverModifier)
 
@@ -92,7 +97,9 @@ fun InstructionBanner(
     if (lanes.isNotEmpty()) {
       LaneGuidanceStrip(
           lanes,
-          Modifier.fillMaxWidth().background(Drivr.cardBand).padding(horizontal = 18.dp, vertical = 12.dp),
+          distanceToManeuverM = distanceToManeuverMeters,
+          motorway = motorway,
+          modifier = Modifier.fillMaxWidth().background(Drivr.cardBand).padding(horizontal = 18.dp, vertical = 12.dp),
       )
     }
     then?.let { next ->

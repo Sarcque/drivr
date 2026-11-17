@@ -46,10 +46,12 @@ private const val EMPTY_FC = """{"type":"FeatureCollection","features":[]}"""
 @Composable
 @MaplibreComposable
 fun DrivrRouteLine(ui: NavigationUiState) {
-  // Always compose the source and layers (empty when there's no route), so they are added once
-  // and only their data changes; an early return here used to drop the layers on some updates.
-  val remaining = remember(ui.routeGeometry, ui.location) { remainingGeometry(ui) }
-  val lineJson = remember(remaining) { if (remaining == null) EMPTY_FC else lineJson(remaining) }
+  // Always compose the source and layers (empty when there's no route), so they are added once.
+  // The line is the whole route and only changes when the route does (start, reroute), not on
+  // every GPS fix: re-sending a 50 km line every second kept the map re-tiling it, and a stale or
+  // half-built line is what made it "not plot". The car and chevrons show where you are on it.
+  val geometry = ui.routeGeometry?.takeIf { it.size >= 2 }
+  val lineJson = remember(geometry) { if (geometry == null) EMPTY_FC else lineJson(geometry) }
   val line = rememberGeoJsonSource(GeoJsonData.JsonString(lineJson))
 
   LineLayer(

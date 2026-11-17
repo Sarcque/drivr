@@ -1,6 +1,13 @@
 package app.drivr.places
 
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -9,86 +16,112 @@ import org.json.JSONObject
 /**
  * Places from OpenStreetMap through the Overpass API: free, open, no key.
  *
- * Built for speed on a phone: small queries (a few km around the car, or bounding boxes along
- * the route) with a short server timeout, sent to two public mirrors at once; the first good
- * answer wins and the other request is cancelled. Answers are cached for a few minutes. For a
- * real release, run your own instance (docker image wiktorn/overpass-api) or bundle POIs offline.
+ * Built for speed on a phone, and so a slow or busy server can't leave the driver waiting:
+ * - small queries (a few km around the car, or bounding boxes along the route);
+ * - several public mirrors: the first two are asked at once, the next ones join after a short
+ *   head start; the first good answer wins and the other requests are cancelled;
+ * - a hard deadline per query (it fails with a clear reason instead of hanging);
+ * - answers cached for a few minutes, and the last good answer is kept as a fallback.
+ * For a real release, run your own instance (docker image wiktorn/overpass-api) or bundle POIs.
  */
 class OverpassClient(
     private val http: OkHttpClient,
     private val endpoints: List<String> = DEFAULT_ENDPOINTS,
     private val cache: TtlCache<String, String> = TtlCache(ttlMs = 10 * 60_000L, maxEntries = 40),
+    /** How many mirrors are asked right away; the rest join after [staggerMs]. */
+    private val parallel: Int = 2,
+    private val staggerMs: Long = 1500,
 ) {
   /** Up to [limit] places of [category] within [radiusM] of a point. */
-  fun nearby(category: PlaceCategory, at: LatLng, radiusM: Int = 3000, limit: Int = 25): List<Place> =
-      run(buildQuery(category, listOf("around:$radiusM,${fmt(at.lat)},${fmt(at.lon)}"), limit, timeoutS = 8))
+  suspend fun nearby(category: PlaceCategory, at: LatLng, radiusM: Int = 3000, limit: Int = 25, deadlineMs: Long = 7000): List<Place> =
+      parse(raw(buildQuery(category, listOf("around:$radiusM,${fmt(at.lat)},${fmt(at.lon)}"), limit, timeoutS = 6), deadlineMs))
 
   /** Places of [category] inside any of [boxes] (south, west, north, east). Bbox queries are cheap. */
-  fun inBoxes(category: PlaceCategory, boxes: List<BBox>, limit: Int = 120): List<Place> {
+  suspend fun inBoxes(category: PlaceCategory, boxes: List<BBox>, limit: Int = 120, deadlineMs: Long = 10_000): List<Place> {
     if (boxes.isEmpty()) return emptyList()
-    return run(buildQuery(category, boxes.map { it.ql() }, limit, timeoutS = 10))
+    return parse(raw(buildQuery(category, boxes.map { it.ql() }, limit, timeoutS = 9), deadlineMs))
   }
 
-  private fun run(query: String): List<Place> = parse(raw(query))
-
-  /** Runs an Overpass QL query on all mirrors at once and returns the first good JSON answer. */
-  fun raw(query: String): String {
+  /** Runs an Overpass QL query and returns the first good JSON answer within [deadlineMs]. */
+  suspend fun raw(query: String, deadlineMs: Long = 10_000): String {
     cache[query]?.let { return it }
-    val result = race(query)
+    // withTimeoutOrNull, not withTimeout: a timeout must surface as an error, not as a silent
+    // cancellation that callers rethrow.
+    val result =
+        withTimeoutOrNull(deadlineMs) { race(query) }
+            ?: throw PlacesException("The OpenStreetMap servers took longer than ${deadlineMs / 1000} s")
     cache[query] = result
     return result
   }
 
-  private fun race(query: String): String {
-    val done = java.util.concurrent.CountDownLatch(1)
-    val winner = java.util.concurrent.atomic.AtomicReference<String?>(null)
+  /** Blocking form for background workers (speed cameras). */
+  fun rawBlocking(query: String, deadlineMs: Long = 45_000): String = runBlocking { raw(query, deadlineMs) }
+
+  private suspend fun race(query: String): String = coroutineScope {
+    val winner = CompletableDeferred<String>()
     val errors = java.util.concurrent.ConcurrentLinkedQueue<Exception>()
-    val pending = java.util.concurrent.atomic.AtomicInteger(endpoints.size)
-    val calls =
-        endpoints.map { url ->
-          http.newCall(Request.Builder().url(url).post(FormBody.Builder().add("data", query).build()).build())
-        }
-    calls.forEach { call ->
-      call.enqueue(
-          object : okhttp3.Callback {
-            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
-              response.use {
-                try {
-                  check(it.isSuccessful) { "Overpass HTTP ${it.code}" }
-                  val body = it.body.string()
-                  // Overpass reports server-side timeouts inside a 200 answer.
-                  check(!body.contains("\"remark\": \"runtime error")) { "Overpass busy" }
-                  if (winner.compareAndSet(null, body)) done.countDown()
-                } catch (e: Exception) {
-                  fail(e)
-                }
+    val jobs =
+        endpoints.mapIndexed { i, url ->
+          launch {
+            // Later mirrors start after a head start, or right away once the earlier ones failed.
+            if (i >= parallel) {
+              withTimeoutOrNull(staggerMs * (i - parallel + 1)) {
+                while (errors.size < i) delay(50)
               }
             }
-
-            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) = fail(e)
-
-            private fun fail(e: Exception) {
+            if (winner.isCompleted) return@launch
+            try {
+              winner.complete(post(url, query))
+            } catch (e: CancellationException) {
+              throw e
+            } catch (e: Exception) {
               errors += e
-              if (pending.decrementAndGet() == 0) done.countDown()
+              if (errors.size == endpoints.size) winner.completeExceptionally(PlacesException.from(errors.toList()))
             }
-          })
-    }
+          }
+        }
     try {
-      done.await()
-    } catch (e: InterruptedException) {
-      calls.forEach { it.cancel() }
-      throw e
+      winner.await()
+    } finally {
+      jobs.forEach { it.cancel() }
     }
-    calls.forEach { it.cancel() }
-    return winner.get() ?: throw (errors.firstOrNull() ?: IllegalStateException("No Overpass endpoint"))
+  }
+
+  private suspend fun post(url: String, query: String): String {
+    val request = Request.Builder().url(url).post(FormBody.Builder().add("data", query).build()).build()
+    val body = http.newCall(request).await { response ->
+      if (!response.isSuccessful) throw PlacesException.http(response.code, url)
+      response.body.string()
+    }
+    // Overpass reports server-side timeouts and overload inside a 200 answer.
+    if (body.contains("\"remark\": \"runtime error") || body.contains("\"remark\":\"runtime error")) {
+      throw PlacesException("OpenStreetMap server busy (${hostOf(url)})")
+    }
+    return body
   }
 
   companion object {
+    /** Public Overpass mirrors, all with full planet data. */
     val DEFAULT_ENDPOINTS =
         listOf(
             "https://overpass-api.de/api/interpreter",
             "https://overpass.private.coffee/api/interpreter",
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+            "https://overpass.kumi.systems/api/interpreter",
         )
+
+    /**
+     * Speed cameras use the mirrors in another order, so their long background queries never
+     * take the slots a driver's fuel search needs on the main server (it allows ~2 per device).
+     */
+    val BACKGROUND_ENDPOINTS =
+        listOf(
+            "https://overpass.private.coffee/api/interpreter",
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+            "https://overpass-api.de/api/interpreter",
+        )
+
+    fun hostOf(url: String) = runCatching { java.net.URI(url).host }.getOrNull() ?: url
 
     private fun fmt(d: Double) = String.format(Locale.ROOT, "%.5f", d)
 

@@ -66,28 +66,65 @@ class DrivingScreenshotTest {
     }
   }
 
+  /** The real overlay layout from NavigationScene: banner, button strip, cards. */
   @Composable
-  private fun BoxScope.Driving(menuOpen: Boolean, withAlert: Boolean) {
-    InstructionBanner(turn, 50.0, modifier = Modifier.align(Alignment.TopCenter).padding(horizontal = 12.dp, vertical = 36.dp))
-    DrivingControls({}, {}, null, {}, Modifier.align(Alignment.CenterStart).padding(start = 12.dp), initiallyOpen = menuOpen)
-    Column(Modifier.align(Alignment.BottomCenter).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-      if (withAlert) {
-        val lane = TrafficEvent("l", TrafficKind.LANE_CLOSED, listOf(LatLon(52.1, 5.2)))
-        DrivingAlert(emptyList(), null, listOf(TrafficAhead(lane, 23_000.0)))
-      }
-      TripCards(speedLimitKmh = 30, speedKmh = null, distanceRemainingM = 57_000.0, durationRemainingS = 2700.0,
-          onEnd = null, now = LocalTime.of(15, 12))
-    }
+  private fun Driving(
+      instruction: VisualInstruction = turn,
+      distanceM: Double = 50.0,
+      withAlert: Boolean,
+      status: RouteStatus = RouteStatus.Idle,
+  ) {
+    StackedOverlay(
+        Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 36.dp),
+        top = {
+          InstructionBanner(instruction, distanceM)
+          RouteStatusCard(status, {}, {})
+        },
+        buttons = { m ->
+          MapButtonColumn(
+              listOf(MapAction("Search", MapIcon.Search) {}, MapAction("Overview", MapIcon.Overview) {}),
+              listOf("Turn list" to {}, "Settings" to {}, "End trip" to {}),
+              m,
+          )
+        },
+        bottom = {
+          Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (withAlert) {
+              val lane = TrafficEvent("l", TrafficKind.LANE_CLOSED, listOf(LatLon(52.1, 5.2)))
+              DrivingAlert(emptyList(), null, listOf(TrafficAhead(lane, 23_000.0)))
+            }
+            TripCards(speedLimitKmh = 30, speedKmh = null, distanceRemainingM = 57_000.0, durationRemainingS = 2700.0,
+                onEnd = null, now = LocalTime.of(15, 12))
+          }
+        },
+    )
   }
 
   @Test
   fun driving() {
-    paparazzi.snapshot { Map { Driving(menuOpen = false, withAlert = true) } }
+    paparazzi.snapshot { Map { Driving(withAlert = true) } }
+  }
+
+  /** A2 → exit 11 Baarn style: 5 lanes, only the rightmost exits; 1.5 km out it says move now. */
+  @Test
+  fun driving_early_lane_change() {
+    val s = uniffi.ferrostar.LaneInfo(false, listOf("straight"), null)
+    val exit = uniffi.ferrostar.LaneInfo(true, listOf("slight right"), "slight right")
+    val baarn =
+        VisualInstruction(
+            primaryContent = VisualInstructionContent("Exit 11: Baarn, Eembrugge", ManeuverType.OFF_RAMP, ManeuverModifier.SLIGHT_RIGHT, null, null, listOf("11")),
+            secondaryContent = null,
+            subContent = VisualInstructionContent("", null, null, null, listOf(s, s, s, s, exit), emptyList()),
+            triggerDistanceBeforeManeuver = 2000.0,
+        )
+    paparazzi.snapshot { Map { Driving(baarn, 1500.0, withAlert = false) } }
   }
 
   @Test
-  fun driving_menu_open() {
-    paparazzi.snapshot { Map { Driving(menuOpen = true, withAlert = false) } }
+  fun driving_route_failed() {
+    paparazzi.snapshot {
+      Map { Driving(withAlert = false, status = RouteStatus.Failed("The routing server took too long. Try again.")) }
+    }
   }
 
   @Test
@@ -108,7 +145,7 @@ class DrivingScreenshotTest {
           Spacer(Modifier.padding(5.dp))
           CategoryChips(null, {})
         }
-        StartPanel(RouteStatus.Idle, {}, Modifier.align(Alignment.BottomCenter))
+        StartPanel(RouteStatus.Idle, {}, Modifier.align(Alignment.BottomCenter).padding(12.dp))
       }
     }
   }
