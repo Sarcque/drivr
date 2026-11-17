@@ -8,6 +8,10 @@ import org.kxml2.io.KXmlParser
 import org.xmlpull.v1.XmlPullParser
 
 class TrafficTest {
+  init {
+    app.drivr.i18n.TestStrings.install()
+  }
+
   private fun parseSample(): List<TrafficEvent> {
     val parser = KXmlParser()
     parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)

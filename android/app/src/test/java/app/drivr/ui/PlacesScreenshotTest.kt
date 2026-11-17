@@ -38,6 +38,10 @@ import org.junit.Test
  * tiles along Valhalla's Utrecht → Amersfoort route. Ranking runs through the app's own code.
  */
 class PlacesScreenshotTest {
+  init {
+    app.drivr.i18n.TestStrings.install()
+  }
+
   @get:Rule
   val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_6, showSystemUi = false)
 

@@ -8,6 +8,10 @@ import org.junit.Test
 import uniffi.ferrostar.GeographicCoordinate
 
 class RouteSliceTest {
+  init {
+    app.drivr.i18n.TestStrings.install()
+  }
+
   private val route = (0..10).map { GeographicCoordinate(52.0 + it * 0.001, 5.0) }
 
   @Test

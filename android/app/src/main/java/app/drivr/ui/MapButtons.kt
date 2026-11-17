@@ -1,5 +1,7 @@
 package app.drivr.ui
 
+import androidx.compose.ui.res.stringResource
+import app.drivr.R
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -77,7 +79,7 @@ fun MapButtonColumn(
       if (overflow.isNotEmpty()) {
         var open by rememberSaveable { mutableStateOf(initiallyOpen) }
         Box {
-          MapRoundButton(MapIcon.More, "More", onClick = { open = true })
+          MapRoundButton(MapIcon.More, stringResource(R.string.places_more), onClick = { open = true })
           DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Drivr.card) {
             overflow.forEach { (label, action) ->
               DropdownMenuItem(
@@ -160,7 +162,7 @@ fun RouteStatusCard(status: RouteStatus, onRetry: () -> Unit, onDismiss: () -> U
       }
       is RouteStatus.Failed -> {
         Text(status.message, color = Color(0xFFFF8A80), fontSize = 14.sp, maxLines = 3, modifier = Modifier.weight(1f))
-        if (status.canRetry) TextButton(onClick = onRetry) { Text("Retry", color = Drivr.accent) }
+        if (status.canRetry) TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry), color = Drivr.accent) }
         TextButton(onClick = onDismiss) { Text("✕", color = Drivr.textMuted) }
       }
       RouteStatus.Idle -> {}

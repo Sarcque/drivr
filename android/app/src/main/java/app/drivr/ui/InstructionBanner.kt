@@ -1,5 +1,8 @@
 package app.drivr.ui
 
+import androidx.compose.ui.res.stringResource
+import app.drivr.i18n.L10n
+import app.drivr.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -107,14 +110,14 @@ fun InstructionBanner(
           Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
           verticalAlignment = Alignment.CenterVertically,
       ) {
-        Text("Then", color = Drivr.text, fontSize = 15.sp)
+        Text(stringResource(R.string.banner_then), color = Drivr.text, fontSize = 15.sp)
         Spacer(Modifier.width(12.dp))
         Box(Modifier.size(22.dp)) { ManeuverImage(next, tint = Drivr.text) }
         Spacer(Modifier.width(10.dp))
         val nextAction = actionPhrase(next.maneuverType, next.maneuverModifier)
         val nextSign = parseSignText(next.text)
         Text(
-            listOfNotNull(nextAction?.lowercase(Locale.ROOT), nextSign.label.ifBlank { null }).joinToString(" · "),
+            listOfNotNull(nextAction?.let(::lowerFirst), nextSign.label.ifBlank { null }).joinToString(" · "),
             color = Drivr.text,
             fontSize = 15.sp,
             maxLines = 1,
@@ -129,23 +132,24 @@ fun InstructionBanner(
 fun actionPhrase(type: ManeuverType?, modifier: ManeuverModifier?): String? {
   val side =
       when (modifier) {
-        ManeuverModifier.LEFT, ManeuverModifier.SLIGHT_LEFT, ManeuverModifier.SHARP_LEFT -> "left"
-        ManeuverModifier.RIGHT, ManeuverModifier.SLIGHT_RIGHT, ManeuverModifier.SHARP_RIGHT -> "right"
+        ManeuverModifier.LEFT, ManeuverModifier.SLIGHT_LEFT, ManeuverModifier.SHARP_LEFT -> false
+        ManeuverModifier.RIGHT, ManeuverModifier.SLIGHT_RIGHT, ManeuverModifier.SHARP_RIGHT -> true
         else -> null
       }
+  fun sided(left: Int, right: Int) = side?.let { L10n.s(if (it) right else left) }
   return when (type) {
-    ManeuverType.FORK -> side?.let { "Keep $it" }
-    ManeuverType.OFF_RAMP -> "Take the exit"
-    ManeuverType.ON_RAMP -> "Take the ramp"
-    ManeuverType.MERGE -> "Merge"
+    ManeuverType.FORK -> sided(R.string.act_keep_left, R.string.act_keep_right)
+    ManeuverType.OFF_RAMP -> L10n.s(R.string.act_exit)
+    ManeuverType.ON_RAMP -> L10n.s(R.string.act_ramp)
+    ManeuverType.MERGE -> L10n.s(R.string.act_merge)
     ManeuverType.TURN, ManeuverType.END_OF_ROAD ->
         when (modifier) {
-          ManeuverModifier.SLIGHT_LEFT, ManeuverModifier.SLIGHT_RIGHT -> side?.let { "Bear $it" }
-          ManeuverModifier.U_TURN -> "Make a U-turn"
-          else -> side?.let { "Turn $it" }
+          ManeuverModifier.SLIGHT_LEFT, ManeuverModifier.SLIGHT_RIGHT -> sided(R.string.act_bear_left, R.string.act_bear_right)
+          ManeuverModifier.U_TURN -> L10n.s(R.string.act_uturn)
+          else -> sided(R.string.act_turn_left, R.string.act_turn_right)
         }
-    ManeuverType.ROUNDABOUT, ManeuverType.ROTARY -> "At the roundabout"
-    ManeuverType.ARRIVE -> "Arrive"
+    ManeuverType.ROUNDABOUT, ManeuverType.ROTARY -> L10n.s(R.string.act_roundabout)
+    ManeuverType.ARRIVE -> L10n.s(R.string.act_arrive)
     else -> null
   }
 }
@@ -153,7 +157,7 @@ fun actionPhrase(type: ManeuverType?, modifier: ManeuverModifier?): String? {
 fun formatDistance(meters: Double): String =
     if (app.drivr.settings.DisplayUnits.imperial) formatImperial(meters) else when {
       meters >= 10_000 -> "${(meters / 1000).roundToInt()} km"
-      meters >= 1_000 -> String.format(Locale.ROOT, "%.1f km", meters / 1000)
+      meters >= 1_000 -> L10n.format("%.1f km", meters / 1000)
       meters >= 100 -> "${(meters / 50).roundToInt() * 50} m"
       else -> "${(meters / 10).roundToInt() * 10} m"
     }
@@ -198,7 +202,11 @@ fun formatImperial(meters: Double): String {
   val miles = meters / 1609.344
   return when {
     miles >= 10 -> "${miles.roundToInt()} mi"
-    miles >= 0.1 -> String.format(Locale.ROOT, "%.1f mi", miles)
+    miles >= 0.1 -> L10n.format("%.1f mi", miles)
     else -> "${((meters * 3.28084) / 50).roundToInt() * 50} ft"
   }
 }
+
+/** "Then turn left": lower-cases the phrase, except in German where nouns keep their capital. */
+private fun lowerFirst(phrase: String): String =
+    if (L10n.locale.language == "de") phrase else phrase.replaceFirstChar { it.lowercase(L10n.locale) }

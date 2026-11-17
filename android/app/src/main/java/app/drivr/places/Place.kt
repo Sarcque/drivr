@@ -1,18 +1,23 @@
 package app.drivr.places
 
+import app.drivr.i18n.L10n
+import app.drivr.R
+
 /**
  * What a driver looks for. Each category maps to OpenStreetMap tags, which is all the data there
  * is: no Google Places, no paid POI database, no keys.
  */
-enum class PlaceCategory(val label: String, val osmFilters: List<String>) {
-  FUEL("Fuel", listOf("[amenity=fuel]")),
-  CHARGING("Charging", listOf("[amenity=charging_station]")),
-  FOOD("Food", listOf("[amenity~\"^(restaurant|fast_food)$\"]")),
-  COFFEE("Coffee", listOf("[amenity=cafe]")),
-  GROCERIES("Groceries", listOf("[shop~\"^(supermarket|convenience)$\"]")),
-  SHOPS("Shops", listOf("[shop~\"^(mall|department_store|bakery|chemist|doityourself|hardware|electronics)$\"]")),
-  PARKING("Parking", listOf("[amenity=parking][access!~\"^(private|no|customers)$\"]")),
-  REST("Rest stops", listOf("[highway~\"^(services|rest_area)$\"]", "[amenity=toilets][access!=private]"));
+enum class PlaceCategory(@androidx.annotation.StringRes val labelRes: Int, val osmFilters: List<String>) {
+  FUEL(R.string.category_fuel, listOf("[amenity=fuel]")),
+  CHARGING(R.string.category_charging, listOf("[amenity=charging_station]")),
+  FOOD(R.string.category_food, listOf("[amenity~\"^(restaurant|fast_food)$\"]")),
+  COFFEE(R.string.category_coffee, listOf("[amenity=cafe]")),
+  GROCERIES(R.string.category_groceries, listOf("[shop~\"^(supermarket|convenience)$\"]")),
+  SHOPS(R.string.category_shops, listOf("[shop~\"^(mall|department_store|bakery|chemist|doityourself|hardware|electronics)$\"]")),
+  PARKING(R.string.category_parking, listOf("[amenity=parking][access!~\"^(private|no|customers)$\"]")),
+  REST(R.string.category_rest, listOf("[highway~\"^(services|rest_area)$\"]", "[amenity=toilets][access!=private]"));
+
+  val label: String get() = L10n.s(labelRes)
 
   companion object {
     fun fromTags(tags: Map<String, String>): PlaceCategory? {
@@ -49,7 +54,7 @@ data class Place(
 
   /** "Diesel", "Euro 95 (E10)", "LPG" from OSM fuel:* tags. */
   val fuels: List<String>
-    get() = FUEL_LABELS.mapNotNull { (key, label) -> label.takeIf { tags["fuel:$key"] == "yes" } }
+    get() = FUEL_LABELS.mapNotNull { (key, label) -> translated(label).takeIf { tags["fuel:$key"] == "yes" } }
 
   /** Charging connectors and the highest power: "CCS 150 kW", "Type 2 22 kW". */
   val sockets: List<String>
@@ -58,8 +63,17 @@ data class Place(
           val count = tags["socket:$key"] ?: return@mapNotNull null
           if (count == "no" || count == "0") return@mapNotNull null
           val kw = parsePowerKw(tags["socket:$key:output"])
-          if (kw != null) "$label ${formatKw(kw)}" else label
+          if (kw != null) "${translated(label)} ${formatKw(kw)}" else translated(label)
         }
+
+  /** Product names (Diesel, CCS) stay as they are; the few plain words are translated. */
+  private fun translated(label: String): String =
+      when (label) {
+        "Hydrogen" -> L10n.s(R.string.fuel_hydrogen)
+        "Truck diesel" -> L10n.s(R.string.fuel_truck_diesel)
+        "Type 2 cable" -> L10n.s(R.string.socket_type2_cable)
+        else -> label
+      }
 
   val maxPowerKw: Double?
     get() =
@@ -116,6 +130,6 @@ data class Place(
       }
     }
 
-    fun formatKw(kw: Double): String = if (kw % 1.0 == 0.0) "${kw.toInt()} kW" else "%.1f kW".format(kw)
+    fun formatKw(kw: Double): String = if (kw % 1.0 == 0.0) "${kw.toInt()} kW" else L10n.format("%.1f kW", kw)
   }
 }

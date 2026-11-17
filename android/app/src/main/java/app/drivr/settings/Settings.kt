@@ -6,9 +6,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-enum class Units(val label: String) {
-  METRIC("Kilometres"),
-  IMPERIAL("Miles"),
+enum class Units(@androidx.annotation.StringRes val labelRes: Int) {
+  METRIC(app.drivr.R.string.units_metric),
+  IMPERIAL(app.drivr.R.string.units_imperial),
 }
 
 /** Everything the driver can switch. Defaults favour a calm screen: AR off, sound on. */

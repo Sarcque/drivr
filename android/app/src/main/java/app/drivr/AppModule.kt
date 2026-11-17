@@ -61,7 +61,8 @@ object AppModule {
     val provider = WellKnownRouteProvider.Valhalla(BuildConfig.VALHALLA_URL, "auto")
     // Valhalla options: metric units, and ask for lane-level banner data (Ferrostar requests
     // OSRM-format output with banner instructions, which carry the per-lane indications).
-    val options = mapOf("units" to "kilometers", "language" to "en-GB")
+    // Turn instructions and the spoken prompts come back in the app language.
+    val options = mapOf("units" to "kilometers", "language" to app.drivr.i18n.L10n.valhallaLanguage())
     FerrostarCore(
         provider.withJsonOptions(options),
         httpClient = httpClient,
@@ -84,7 +85,7 @@ object AppModule {
   val alternativeRoutes: AlternativeRoutesClient by lazy {
     val provider =
         WellKnownRouteProvider.Valhalla(BuildConfig.VALHALLA_URL, "auto")
-            .withJsonOptions(mapOf("units" to "kilometers", "language" to "en-GB", "alternates" to 2))
+            .withJsonOptions(mapOf("units" to "kilometers", "language" to app.drivr.i18n.L10n.valhallaLanguage(), "alternates" to 2))
     AlternativeRoutesClient(
         OkHttpClient.Builder().callTimeout(Duration.ofSeconds(25)).build(),
         uniffi.ferrostar.RouteAdapter.fromWellKnownRouteProvider(provider),

@@ -27,6 +27,10 @@ import uniffi.ferrostar.VisualInstructionContent
 
 /** Phone on a landscape mount: cards in a column on the left, buttons on the right edge. */
 class DrivingLandscapeScreenshotTest {
+  init {
+    app.drivr.i18n.TestStrings.install()
+  }
+
   @get:Rule
   val paparazzi =
       Paparazzi(

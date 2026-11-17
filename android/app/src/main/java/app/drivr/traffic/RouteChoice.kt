@@ -113,14 +113,15 @@ object RouteChoice {
 
   /**
    * The road a step drives on. Valhalla leaves the name empty on motorways and puts the number in
-   * the instruction ("Take the Knooppunt Empel exit onto A2 toward Utrecht"), so prefer that.
+   * the instruction ("Take the Knooppunt Empel exit onto A2 toward Utrecht", or "Neem afrit ...
+   * naar A2"), so prefer the first road number there; it works in every language.
    */
   fun stepRoad(roadName: String?, instruction: String?, distanceM: Double): StepRoad {
-    val number = instruction?.let { INSTRUCTION_ROAD.find(it)?.groupValues?.get(1) }
+    val number = instruction?.let { INSTRUCTION_ROAD.find(it)?.value }
     return StepRoad(number ?: roadName?.takeIf { it.isNotBlank() }, distanceM)
   }
 
-  private val INSTRUCTION_ROAD = Regex("""\b(?:[Oo]nto|[Oo]n|[Tt]ake)(?: the)? ([AENS]\d{1,3})\b""")
+  private val INSTRUCTION_ROAD = Regex("""\b[AENS]\d{1,3}\b""")
 
   /** "A27; A28" or "Ring Utrecht (A27)": the road number when there is one, else the first name. */
   internal fun primaryName(raw: String): String {

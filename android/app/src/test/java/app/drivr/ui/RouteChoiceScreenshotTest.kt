@@ -32,13 +32,34 @@ import uniffi.ferrostar.VisualInstructionContent
  * are what RouteChoice computes from that data (see RouteChoiceTest).
  */
 class RouteChoiceScreenshotTest {
+  init {
+    app.drivr.i18n.TestStrings.install()
+  }
+
+  private val device = DeviceConfig.PIXEL_6.copy(screenWidth = 1220, screenHeight = 2712, xdpi = 480, ydpi = 480, density = Density.XXHIGH)
+
   @get:Rule
-  val paparazzi =
-      Paparazzi(
-          deviceConfig = DeviceConfig.PIXEL_6.copy(screenWidth = 1220, screenHeight = 2712, xdpi = 480, ydpi = 480, density = Density.XXHIGH),
-          showSystemUi = false,
-          maxPercentDifference = 0.1,
-      )
+  val paparazzi = Paparazzi(deviceConfig = device, showSystemUi = false, maxPercentDifference = 0.1)
+
+  @org.junit.After
+  fun englishAgain() = app.drivr.i18n.TestStrings.install()
+
+  /** The same cards in Dutch. */
+  @Test
+  fun route_choice_and_offer_nl() {
+    app.drivr.i18n.TestStrings.install(app.drivr.i18n.XmlStrings("values-nl"))
+    paparazzi.unsafeUpdateConfig(deviceConfig = device.copy(locale = "nl"))
+    val a2 = ScoredRoute(3086.5, 57_241.0, 4697.0, 0, "A2")
+    val a27 = ScoredRoute(4293.8, 90_262.0, 3512.0, 0, "A27")
+    paparazzi.snapshot {
+      Screen("bg_route_choice.png", toA2, 2400.0) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          FasterRouteCard(savesSeconds = 11 * 60.0, via = "N322", currentDelaySeconds = 27 * 60.0, onSwitch = {}, onKeep = {})
+          RouteChoiceCard(listOf(a2, a27), selected = 0, onSelect = {}, onGo = {})
+        }
+      }
+    }
+  }
 
   @Composable
   private fun Screen(bg: String, banner: VisualInstruction, distanceM: Double, card: @Composable () -> Unit) {

@@ -1,5 +1,6 @@
 package app.drivr
 
+import android.content.Context
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.util.Log
@@ -10,12 +11,17 @@ import androidx.activity.viewModels
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
+import app.drivr.i18n.AppLanguage
+import app.drivr.i18n.L10n
 import app.drivr.ui.NavigationScene
 import com.stadiamaps.ferrostar.core.AndroidTtsStatusListener
-import java.util.Locale
 
 class MainActivity : ComponentActivity(), AndroidTtsStatusListener {
   private val viewModel: DrivrViewModel by viewModels()
+
+  override fun attachBaseContext(newBase: Context) {
+    super.attachBaseContext(AppLanguage.wrap(newBase))
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -45,7 +51,7 @@ class MainActivity : ComponentActivity(), AndroidTtsStatusListener {
   }
 
   override fun onTtsInitialized(tts: TextToSpeech?, status: Int) {
-    tts?.language = Locale.getDefault()
+    tts?.language = L10n.locale
   }
 
   override fun onTtsSpeakError(utteranceId: String, status: Int) {

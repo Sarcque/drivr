@@ -26,7 +26,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.drivr.R
+import app.drivr.i18n.L10n
 import app.drivr.traffic.ScoredRoute
+import androidx.compose.ui.res.stringResource
 import org.maplibre.compose.expressions.dsl.const
 import org.maplibre.compose.expressions.dsl.exponential
 import org.maplibre.compose.expressions.dsl.interpolate
@@ -125,7 +128,7 @@ fun RouteChoiceCard(
         )
         Column(Modifier.weight(1f)) {
           Text(
-              listOfNotNull(o.via?.let { "via $it" }, formatDistance(o.distanceM)).joinToString(" · "),
+              listOfNotNull(o.via?.let { stringResource(R.string.route_choice_via, it) }, formatDistance(o.distanceM)).joinToString(" · "),
               color = Drivr.text,
               fontSize = 14.sp,
               maxLines = 1,
@@ -135,11 +138,11 @@ fun RouteChoiceCard(
         }
         val extra = o.totalSeconds - fastest
         if (i == fastestIndex) {
-          Text("Fastest", color = Drivr.ok, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+          Text(stringResource(R.string.route_choice_fastest), color = Drivr.ok, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         } else if (extra < 60) {
-          Text("Same time", color = Drivr.textMuted, fontSize = 13.sp)
+          Text(stringResource(R.string.route_choice_same_time), color = Drivr.textMuted, fontSize = 13.sp)
         } else {
-          Text("+${formatDuration(extra)}", color = Drivr.textMuted, fontSize = 13.sp)
+          Text(stringResource(R.string.route_choice_extra, formatDuration(extra)), color = Drivr.textMuted, fontSize = 13.sp)
         }
       }
     }
@@ -147,9 +150,9 @@ fun RouteChoiceCard(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 10.dp, top = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-      Text("Times include live traffic", color = Drivr.textMuted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+      Text(stringResource(R.string.route_choice_live), color = Drivr.textMuted, fontSize = 11.sp, modifier = Modifier.weight(1f))
       Text(
-          "Go",
+          stringResource(R.string.route_choice_go),
           color = Color.White,
           fontWeight = FontWeight.SemiBold,
           fontSize = 15.sp,
@@ -163,8 +166,8 @@ fun RouteChoiceCard(
 
 private fun trafficNote(o: ScoredRoute): Pair<String, Color>? =
     when {
-      o.closures > 0 -> "Road closed on this route" to TrafficColors.jam
-      o.trafficSeconds >= 60 -> "${formatDuration(o.trafficSeconds)} traffic delay" to TrafficColors.slow
+      o.closures > 0 -> L10n.s(R.string.route_choice_closed) to TrafficColors.jam
+      o.trafficSeconds >= 60 -> L10n.s(R.string.route_choice_traffic_delay, formatDuration(o.trafficSeconds)) to TrafficColors.slow
       else -> null
     }
 
@@ -195,15 +198,15 @@ fun FasterRouteCard(
       Spacer(Modifier.width(12.dp))
       Column(Modifier.weight(1f)) {
         Text(
-            "Faster route · saves ${formatDuration(savesSeconds)}",
+            stringResource(R.string.faster_route_title, formatDuration(savesSeconds)),
             color = Drivr.text,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
             listOfNotNull(
-                    via?.let { "via $it" },
-                    if (currentDelaySeconds >= 60) "jam on your route +${formatDuration(currentDelaySeconds)}" else "traffic on your route",
+                    via?.let { stringResource(R.string.route_choice_via, it) },
+                    if (currentDelaySeconds >= 60) stringResource(R.string.faster_route_jam, formatDuration(currentDelaySeconds)) else stringResource(R.string.faster_route_traffic),
                 )
                 .joinToString(" · "),
             color = Drivr.textMuted,
@@ -216,7 +219,7 @@ fun FasterRouteCard(
     Spacer(Modifier.height(10.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
       Text(
-          "Keep route",
+          stringResource(R.string.faster_route_keep),
           color = Drivr.text,
           fontSize = 15.sp,
           modifier =
@@ -225,7 +228,7 @@ fun FasterRouteCard(
           textAlign = androidx.compose.ui.text.style.TextAlign.Center,
       )
       Text(
-          "Switch",
+          stringResource(R.string.faster_route_switch),
           color = Color.White,
           fontSize = 15.sp,
           fontWeight = FontWeight.SemiBold,

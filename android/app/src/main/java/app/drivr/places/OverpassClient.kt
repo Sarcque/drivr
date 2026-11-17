@@ -1,5 +1,7 @@
 package app.drivr.places
 
+import app.drivr.i18n.L10n
+import app.drivr.R
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -49,7 +51,7 @@ class OverpassClient(
     // cancellation that callers rethrow.
     val result =
         withTimeoutOrNull(deadlineMs) { race(query) }
-            ?: throw PlacesException("The OpenStreetMap servers took longer than ${deadlineMs / 1000} s")
+            ?: throw PlacesException(L10n.s(R.string.places_err_overpass_slow, deadlineMs / 1000))
     cache[query] = result
     return result
   }
@@ -95,7 +97,7 @@ class OverpassClient(
     }
     // Overpass reports server-side timeouts and overload inside a 200 answer.
     if (body.contains("\"remark\": \"runtime error") || body.contains("\"remark\":\"runtime error")) {
-      throw PlacesException("OpenStreetMap server busy (${hostOf(url)})")
+      throw PlacesException(L10n.s(R.string.places_err_overpass_busy, hostOf(url)))
     }
     return body
   }

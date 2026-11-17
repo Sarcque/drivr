@@ -6,6 +6,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ArProjectionTest {
+  init {
+    app.drivr.i18n.TestStrings.install()
+  }
+
   private val w = 1080f
   private val h = 2400f
 
