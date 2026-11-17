@@ -1,5 +1,8 @@
 package app.drivr.ui
 
+import androidx.compose.ui.res.stringResource
+import app.drivr.i18n.L10n
+import app.drivr.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,8 +50,8 @@ fun TurnList(
           .padding(vertical = 8.dp)
   ) {
     Row(Modifier.padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-      Text("Turns", color = Drivr.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-      TextButton(onClick = onClose) { Text("Close", color = Drivr.accent) }
+      Text(stringResource(R.string.turns_title), color = Drivr.text, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+      TextButton(onClick = onClose) { Text(stringResource(R.string.action_close), color = Drivr.accent) }
     }
     LazyColumn(Modifier.heightIn(max = 420.dp)) {
       itemsIndexed(steps.drop(1)) { i, step ->
@@ -90,8 +93,6 @@ fun TurnList(
 fun laneSummary(lanes: List<uniffi.ferrostar.LaneInfo>): String? {
   val active = lanes.indices.filter { lanes[it].active }.map { it + 1 }
   if (active.isEmpty() || active.size == lanes.size) return null
-  val list =
-      if (active.size == 1) "lane ${active[0]}"
-      else "lanes ${active.dropLast(1).joinToString(", ")} & ${active.last()}"
-  return "Use $list of ${lanes.size}"
+  return if (active.size == 1) L10n.s(R.string.lane_summary_one, active[0], lanes.size)
+  else L10n.s(R.string.lane_summary_many, active.dropLast(1).joinToString(", "), active.last(), lanes.size)
 }

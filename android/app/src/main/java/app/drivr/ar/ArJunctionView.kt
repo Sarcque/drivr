@@ -1,5 +1,7 @@
 package app.drivr.ar
 
+import androidx.compose.ui.res.stringResource
+import app.drivr.R
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -143,9 +145,9 @@ fun ArJunctionView(ui: NavigationUiState, onClose: () -> Unit, modifier: Modifie
             .padding(horizontal = 16.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-      Text("AR · phone on the dashboard, camera facing the road", color = Color.White, fontSize = 13.sp)
+      Text(stringResource(R.string.ar_hint), color = Color.White, fontSize = 13.sp)
       Spacer(Modifier.width(8.dp))
-      TextButton(onClick = onClose) { Text("Map", color = RouteBlue) }
+      TextButton(onClick = onClose) { Text(stringResource(R.string.ar_map), color = RouteBlue) }
     }
   }
 }

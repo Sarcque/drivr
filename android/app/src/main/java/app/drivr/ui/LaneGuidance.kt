@@ -1,5 +1,7 @@
 package app.drivr.ui
 
+import app.drivr.i18n.L10n
+import app.drivr.R
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -100,13 +102,17 @@ fun laneAdvice(lanes: List<LaneInfo>, distanceM: Double?, motorway: Boolean): La
   if (distanceM == null || changes == 0) return LaneAdvice(hint, urgent = false)
   val side = laneSide(lanes)
   val start = laneChangeStartM(changes)
-  val lanesWord = if (changes == 1) "1 lane" else "up to $changes lanes"
+  val lanesWord = L10n.p(R.plurals.lane_changes, changes)
   return when {
     distanceM <= FINAL_STRETCH_M -> LaneAdvice(hint, urgent = changes > 1)
-    distanceM <= start ->
-        LaneAdvice(if (side != null) "Move $side now · $lanesWord" else "Change lanes now · $lanesWord", urgent = true)
-    motorway && distanceM <= start + MOTORWAY_HEADS_UP_M ->
-        LaneAdvice(if (side != null) "Keep $side soon · $lanesWord" else "Prepare to change lanes · $lanesWord", urgent = false)
+    distanceM <= start -> {
+      val id = when (side) { "right" -> R.string.lane_now_right; "left" -> R.string.lane_now_left; else -> R.string.lane_now }
+      LaneAdvice(L10n.s(id, lanesWord), urgent = true)
+    }
+    motorway && distanceM <= start + MOTORWAY_HEADS_UP_M -> {
+      val id = when (side) { "right" -> R.string.lane_soon_right; "left" -> R.string.lane_soon_left; else -> R.string.lane_soon }
+      LaneAdvice(L10n.s(id, lanesWord), urgent = false)
+    }
     else -> LaneAdvice(hint, urgent = false)
   }
 }
@@ -155,12 +161,11 @@ fun laneHint(lanes: List<LaneInfo>): String? {
   val active = lanes.indices.filter { lanes[it].active }
   if (active.isEmpty() || active.size == lanes.size) return null
   val n = active.size
-  val word = if (n == 1) "lane" else "$n lanes"
   return when {
-    active.last() == lanes.lastIndex && active.first() == lanes.size - n ->
-        if (n == 1) "Use the right lane" else "Use the right $word"
-    active.first() == 0 && active.last() == n - 1 ->
-        if (n == 1) "Use the left lane" else "Use the left $word"
-    else -> if (n == 1) "Use lane ${active.first() + 1}" else "Use lanes ${active.first() + 1}–${active.last() + 1}"
+    active.last() == lanes.lastIndex && active.first() == lanes.size - n -> L10n.p(R.plurals.lane_use_right_n, n)
+    active.first() == 0 && active.last() == n - 1 -> L10n.p(R.plurals.lane_use_left_n, n)
+    else ->
+        if (n == 1) L10n.s(R.string.lane_use_one, active.first() + 1)
+        else L10n.s(R.string.lane_use_range, active.first() + 1, active.last() + 1)
   }
 }

@@ -1,5 +1,6 @@
 package app.drivr
 
+import app.drivr.i18n.L10n
 import android.util.Log
 import app.drivr.traffic.LatLon
 import app.drivr.traffic.RouteTraffic
@@ -51,7 +52,7 @@ import uniffi.ferrostar.WaypointKind
 sealed interface RouteStatus {
   data object Idle : RouteStatus
 
-  data class Loading(val message: String = "Finding a route…") : RouteStatus
+  data class Loading(val message: String = L10n.s(R.string.route_finding)) : RouteStatus
 
   data class Failed(val message: String, val canRetry: Boolean = true) : RouteStatus
 }
@@ -215,11 +216,11 @@ class DrivrViewModel(
           else
               liveFix.value
                   ?: run {
-                    _routeStatus.value = RouteStatus.Loading("Waiting for GPS…")
+                    _routeStatus.value = RouteStatus.Loading(L10n.s(R.string.route_waiting_gps))
                     withTimeoutOrNull(20_000) { liveFix.filterNotNull().first() }
                   }
       if (from == null) {
-        _routeStatus.value = RouteStatus.Failed("No GPS fix yet. Go outside or near a window and try again.")
+        _routeStatus.value = RouteStatus.Failed(L10n.s(R.string.route_no_gps))
         return@launch
       }
       navigate(from, to, name, simulate, stops)
@@ -248,8 +249,8 @@ class DrivrViewModel(
                   core.getRoutes(from, waypoints)
                 }
                 .getOrThrow()
-        val route = routes.firstOrNull() ?: error("No route found to this place")
-        check(route.geometry.size >= 2) { "The route came back without a line" }
+        val route = routes.firstOrNull() ?: error(L10n.s(R.string.route_none))
+        check(route.geometry.size >= 2) { L10n.s(R.string.route_no_line) }
         Log.i(TAG, "Route: ${route.geometry.size} points, ${route.distance.toInt()} m")
         if (simulate) locationProvider.enableSimulationOn(route)
         else locationProvider.disableSimulation()
@@ -285,10 +286,10 @@ class DrivrViewModel(
   private fun routingError(e: Exception): String {
     val chain = generateSequence(e as Throwable) { it.cause }.toList()
     return when {
-      chain.any { it is java.net.UnknownHostException } -> "No internet connection, so no route."
+      chain.any { it is java.net.UnknownHostException } -> L10n.s(R.string.route_offline)
       chain.any { it is java.net.SocketTimeoutException || it is java.io.InterruptedIOException } ->
-          "The routing server took too long. Try again."
-      else -> "Couldn't find a route: ${e.message ?: e.javaClass.simpleName}"
+          L10n.s(R.string.route_timeout)
+      else -> L10n.s(R.string.route_failed, e.message ?: e.javaClass.simpleName)
     }
   }
 
@@ -348,12 +349,12 @@ class DrivrViewModel(
   }
 
   private fun noLocationYet() {
-    _places.value = _places.value.copy(loading = false, error = "Waiting for your location. Try again in a moment.")
+    _places.value = _places.value.copy(loading = false, error = L10n.s(R.string.places_waiting_location))
   }
 
   /** What went wrong, in words a driver can act on. */
   private fun placesError(e: Exception): String =
-      "Couldn't load places: " + app.drivr.places.PlacesException.reason(e) + ". Tap Try again."
+      L10n.s(R.string.places_failed, app.drivr.places.PlacesException.reason(e))
 
   /** Runs the last search again (after an error). */
   fun retryPlaces() {

@@ -1,5 +1,7 @@
 package app.drivr.places
 
+import app.drivr.i18n.L10n
+import app.drivr.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -82,7 +84,7 @@ class PlacesRepository(
             when {
               stale != null -> {
                 emit(PlacesUpdate(rankNearby(stale, here, route, corridor), done = true,
-                    note = "Showing earlier results: ${PlacesException.reason(e)}"))
+                    note = L10n.s(R.string.places_note_stale, PlacesException.reason(e))))
                 return@flow
               }
               navigating -> emptyList()
@@ -100,7 +102,7 @@ class PlacesRepository(
         emit(
             wide.fold(
                 { PlacesUpdate(rankNearby(near + it, here, null, corridor), done = true) },
-                { PlacesUpdate(nearRanked, done = true, note = if (nearRanked.isEmpty()) "Nothing found within 3 km; the wider search failed (${PlacesException.reason(it)})" else null) },
+                { PlacesUpdate(nearRanked, done = true, note = if (nearRanked.isEmpty()) L10n.s(R.string.places_note_wider_failed, PlacesException.reason(it)) else null) },
             ))
       }
       return@flow
@@ -113,7 +115,7 @@ class PlacesRepository(
       emit(PlacesUpdate(merged, done = true))
     }
     along.onFailure {
-      emit(PlacesUpdate(nearRanked, done = true, note = "Showing places near you; the route search failed (${PlacesException.reason(it)})."))
+      emit(PlacesUpdate(nearRanked, done = true, note = L10n.s(R.string.places_note_route_failed, PlacesException.reason(it))))
     }
   }.flowOn(Dispatchers.IO)
 
@@ -134,7 +136,7 @@ class PlacesRepository(
             listOf(0L to fromOverpass, PHOTON_HEAD_START_MS to fromPhoton),
             useful = { it.isNotEmpty() },
         )
-      } ?: throw PlacesException("No answer within ${NEARBY_DEADLINE_MS / 1000} s")
+      } ?: throw PlacesException(L10n.s(R.string.places_err_no_answer, (NEARBY_DEADLINE_MS / 1000).toInt()))
 
   /** Near the car: on-route places first (in driving order), then the rest by distance. */
   private fun rankNearby(places: List<Place>, here: LatLng, route: List<LatLng>?, corridorM: Double): List<PlaceResult> {
@@ -150,7 +152,7 @@ class PlacesRepository(
       withContext(Dispatchers.IO) {
         val places =
             withTimeoutOrNull(8_000) { photon.searchAsync(text, here) }
-                ?: throw PlacesException("Search took longer than 8 s")
+                ?: throw PlacesException(L10n.s(R.string.places_err_search_slow, 8))
         // Typed searches can be anywhere, so keep everything; just add route info where it fits.
         rank(places, here, route, corridorM = null)
       }

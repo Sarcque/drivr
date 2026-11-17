@@ -41,6 +41,10 @@ import uniffi.ferrostar.VisualInstructionContent
  * route line drawn; the overlays are the app's real composables.
  */
 class DrivingScreenshotTest {
+  init {
+    app.drivr.i18n.TestStrings.install()
+  }
+
   @get:Rule
   val paparazzi =
       Paparazzi(

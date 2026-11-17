@@ -29,6 +29,10 @@ import uniffi.ferrostar.VisualInstructionContent
  * camera). The road and the overlay go through the same projector, so this checks they line up.
  */
 class ArOverlayScreenshotTest {
+  init {
+    app.drivr.i18n.TestStrings.install()
+  }
+
   @get:Rule
   val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_6, showSystemUi = false)
 

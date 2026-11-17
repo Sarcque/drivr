@@ -39,6 +39,10 @@ import uniffi.ferrostar.VisualInstructionContent
 
 /** The music card on the browse and driving screens, at the size of Joris's phone. */
 class MusicScreenshotTest {
+  init {
+    app.drivr.i18n.TestStrings.install()
+  }
+
   @get:Rule
   val paparazzi =
       Paparazzi(

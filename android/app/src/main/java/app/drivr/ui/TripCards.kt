@@ -1,5 +1,8 @@
 package app.drivr.ui
 
+import androidx.compose.ui.res.stringResource
+import app.drivr.i18n.L10n
+import app.drivr.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -57,7 +60,7 @@ fun TripCards(
             .padding(vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-      Text("ARRIVAL", color = Drivr.textMuted, fontSize = 12.sp, letterSpacing = 1.sp)
+      Text(stringResource(R.string.trip_arrival), color = Drivr.textMuted, fontSize = 12.sp, letterSpacing = 1.sp)
       Text(
           now.plusSeconds(durationRemainingS.toLong()).format(DateTimeFormatter.ofPattern("HH:mm")),
           color = Drivr.text,
@@ -71,7 +74,7 @@ fun TripCards(
       )
       if (trafficDelayS >= 60) {
         Text(
-            "incl. +${formatDuration(trafficDelayS)} traffic",
+            stringResource(R.string.trip_traffic_delay, formatDuration(trafficDelayS)),
             color = TrafficColors.slow,
             fontSize = 12.sp,
         )
@@ -112,5 +115,5 @@ private fun SpeedCard(limitKmh: Int?, speedKmh: Int?) {
 
 fun formatDuration(seconds: Double): String {
   val min = (seconds / 60).roundToInt().coerceAtLeast(1)
-  return if (min < 60) "$min min" else "${min / 60} h ${min % 60} min"
+  return if (min < 60) L10n.s(R.string.duration_min, min) else L10n.s(R.string.duration_h_min, min / 60, min % 60)
 }

@@ -29,6 +29,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
+import app.drivr.R
+import app.drivr.i18n.AppLanguage
 import app.drivr.settings.Settings
 import app.drivr.settings.Units
 
@@ -41,43 +50,47 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     musicAccess: Boolean = false,
     onMusicAccess: () -> Unit = {},
+    /** Picked language tag, "" to follow the phone. */
+    language: String = "",
+    onLanguage: (String) -> Unit = {},
 ) {
   Column(modifier.fillMaxSize().background(Color(0xFF0E1013)).statusBarsPadding().navigationBarsPadding()) {
     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-      Text("Settings", color = Drivr.text, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-      Text("Done", color = Drivr.accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+      Text(stringResource(R.string.settings_title), color = Drivr.text, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+      Text(stringResource(R.string.action_done), color = Drivr.accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
           modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onClose).padding(12.dp))
     }
     Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-      Section("Guidance") {
-        Toggle("Voice guidance", "Spoken turn instructions", settings.voice) { v -> onChange { it.copy(voice = v) } }
-        Toggle("AR junction view", "Camera view with the route drawn on the road", settings.arEnabled) { v -> onChange { it.copy(arEnabled = v) } }
-        Toggle("Open AR before turns", "Shows AR by itself about 300 m before each turn", settings.arAuto, enabled = settings.arEnabled) { v -> onChange { it.copy(arAuto = v) } }
+      Section(stringResource(R.string.settings_language)) { LanguagePicker(language, onLanguage) }
+      Section(stringResource(R.string.settings_guidance)) {
+        Toggle(stringResource(R.string.settings_voice), stringResource(R.string.settings_voice_sub), settings.voice) { v -> onChange { it.copy(voice = v) } }
+        Toggle(stringResource(R.string.settings_ar), stringResource(R.string.settings_ar_sub), settings.arEnabled) { v -> onChange { it.copy(arEnabled = v) } }
+        Toggle(stringResource(R.string.settings_ar_auto), stringResource(R.string.settings_ar_auto_sub), settings.arAuto, enabled = settings.arEnabled) { v -> onChange { it.copy(arAuto = v) } }
       }
-      Section("Alerts") {
-        Toggle("Speed cameras", "Fixed cameras and average-speed checks from OpenStreetMap", settings.speedCameras) { v -> onChange { it.copy(speedCameras = v) } }
-        Toggle("Traffic alerts", "Jams, accidents and closures ahead (NDW, Netherlands)", settings.trafficAlerts) { v -> onChange { it.copy(trafficAlerts = v) } }
+      Section(stringResource(R.string.settings_alerts)) {
+        Toggle(stringResource(R.string.settings_cameras), stringResource(R.string.settings_cameras_sub), settings.speedCameras) { v -> onChange { it.copy(speedCameras = v) } }
+        Toggle(stringResource(R.string.settings_traffic_alerts), stringResource(R.string.settings_traffic_alerts_sub), settings.trafficAlerts) { v -> onChange { it.copy(trafficAlerts = v) } }
       }
-      Section("Music") {
-        Toggle("Music controls while driving", "Adds Music to the driving menu; the card stays hidden until you open it",
+      Section(stringResource(R.string.settings_music)) {
+        Toggle(stringResource(R.string.settings_music_driving), stringResource(R.string.settings_music_driving_sub),
             settings.musicWhileDriving) { v -> onChange { it.copy(musicWhileDriving = v) } }
         Row(Modifier.fillMaxWidth().clickable(onClick = onMusicAccess).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
           Column(Modifier.weight(1f)) {
-            Text("Access to your music player", color = Drivr.text, fontSize = 16.sp)
-            Text("Spotify, YouTube Music and others. No login needed", color = Drivr.textMuted, fontSize = 13.sp)
+            Text(stringResource(R.string.settings_music_access), color = Drivr.text, fontSize = 16.sp)
+            Text(stringResource(R.string.settings_music_access_sub), color = Drivr.textMuted, fontSize = 13.sp)
           }
-          Text(if (musicAccess) "On" else "Allow", color = if (musicAccess) Drivr.ok else Drivr.accent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+          Text(stringResource(if (musicAccess) R.string.settings_on else R.string.action_allow), color = if (musicAccess) Drivr.ok else Drivr.accent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         }
       }
-      Section("Map") {
-        Toggle("Traffic on the map", "Colour jams and show incidents", settings.trafficOnMap) { v -> onChange { it.copy(trafficOnMap = v) } }
-        Toggle("3D buildings", "Turn off for a flatter, calmer map", settings.buildings3d) { v -> onChange { it.copy(buildings3d = v) } }
+      Section(stringResource(R.string.settings_map)) {
+        Toggle(stringResource(R.string.settings_traffic_map), stringResource(R.string.settings_traffic_map_sub), settings.trafficOnMap) { v -> onChange { it.copy(trafficOnMap = v) } }
+        Toggle(stringResource(R.string.settings_3d), stringResource(R.string.settings_3d_sub), settings.buildings3d) { v -> onChange { it.copy(buildings3d = v) } }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-          Text("Distances", color = Drivr.text, fontSize = 16.sp, modifier = Modifier.weight(1f))
+          Text(stringResource(R.string.settings_distances), color = Drivr.text, fontSize = 16.sp, modifier = Modifier.weight(1f))
           Row(Modifier.clip(RoundedCornerShape(10.dp)).background(Drivr.cardBand).padding(3.dp)) {
             Units.entries.forEach { u ->
               val on = settings.units == u
-              Text(u.label, color = if (on) Color.White else Drivr.textMuted, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+              Text(stringResource(u.labelRes), color = if (on) Color.White else Drivr.textMuted, fontSize = 14.sp, fontWeight = FontWeight.Medium,
                   modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(if (on) Drivr.accent else Color.Transparent)
                       .clickable { onChange { it.copy(units = u) } }.padding(horizontal = 12.dp, vertical = 7.dp))
             }
@@ -85,8 +98,36 @@ fun SettingsScreen(
         }
       }
       Text(
-          "Map data © OpenStreetMap contributors · Tiles OpenFreeMap · Routing Valhalla (FOSSGIS) · Traffic NDW",
+          stringResource(R.string.settings_credits),
           color = Drivr.inactive, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+    }
+  }
+}
+
+/** The app language: the phone's, or one of Drivr's translations, each named in its own language. */
+@Composable
+private fun LanguagePicker(language: String, onLanguage: (String) -> Unit) {
+  var open by remember { mutableStateOf(false) }
+  val phone = stringResource(R.string.settings_language_system)
+  val names = AppLanguage.SUPPORTED.toMap()
+  Box {
+    Row(Modifier.fillMaxWidth().clickable { open = true }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+      Column(Modifier.weight(1f)) {
+        Text(names[language] ?: phone, color = Drivr.text, fontSize = 16.sp)
+        Text(stringResource(R.string.settings_language_sub), color = Drivr.textMuted, fontSize = 13.sp)
+      }
+      Text("▾", color = Drivr.accent, fontSize = 18.sp)
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Drivr.card) {
+      (listOf("" to phone) + AppLanguage.SUPPORTED).forEach { (tag, name) ->
+        DropdownMenuItem(
+            text = { Text(name, color = if (tag == language) Drivr.accent else Drivr.text, fontSize = 16.sp) },
+            onClick = {
+              open = false
+              if (tag != language) onLanguage(tag)
+            },
+        )
+      }
     }
   }
 }

@@ -1,15 +1,19 @@
 package app.drivr.traffic
 
+import app.drivr.i18n.L10n
+import app.drivr.R
 import java.time.Instant
 
-enum class TrafficKind(val label: String) {
-  ACCIDENT("Accident"),
-  JAM("Traffic jam"),
-  SLOW("Slow traffic"),
-  BROKEN_DOWN("Broken-down vehicle"),
-  OBSTRUCTION("Obstruction on the road"),
-  ROAD_CLOSED("Road closed"),
-  LANE_CLOSED("Lane closed"),
+enum class TrafficKind(@androidx.annotation.StringRes val labelRes: Int) {
+  ACCIDENT(R.string.traffic_accident),
+  JAM(R.string.traffic_jam),
+  SLOW(R.string.traffic_slow),
+  BROKEN_DOWN(R.string.traffic_broken_down),
+  OBSTRUCTION(R.string.traffic_obstruction),
+  ROAD_CLOSED(R.string.traffic_road_closed),
+  LANE_CLOSED(R.string.traffic_lane_closed);
+
+  val label: String get() = L10n.s(labelRes)
 }
 
 data class LatLon(val lat: Double, val lon: Double)

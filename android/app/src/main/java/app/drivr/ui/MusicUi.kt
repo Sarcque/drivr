@@ -1,5 +1,7 @@
 package app.drivr.ui
 
+import androidx.compose.ui.res.stringResource
+import app.drivr.R
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -63,7 +65,7 @@ fun MusicCard(
     val playing = state.nowPlaying
     when {
       !state.hasAccess -> AccessPrompt(onAllow, onClose)
-      playing == null -> Message("Nothing is playing", "Start Spotify or another music app, then come back here.", onClose)
+      playing == null -> Message(stringResource(R.string.music_nothing_title), stringResource(R.string.music_nothing_body), onClose)
       else -> Player(playing, onPlayPause, onPrevious, onNext, onOpenPlayer, onClose)
     }
   }
@@ -104,16 +106,15 @@ private fun AccessPrompt(onAllow: () -> Unit, onClose: () -> Unit) {
       Box(Modifier.size(44.dp).clip(CircleShape).background(Drivr.cardBand), contentAlignment = Alignment.Center) { NoteGlyph(Drivr.text) }
       Spacer(Modifier.width(12.dp))
       Column(Modifier.weight(1f)) {
-        Text("Control your music from Drivr", color = Drivr.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(R.string.music_access_title), color = Drivr.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         Text(
-            "Works with Spotify, YouTube Music and other players, no login needed. Android calls this " +
-                "\"notification access\"; Drivr only uses it to see what is playing.",
+            stringResource(R.string.music_access_body),
             color = Drivr.textMuted, fontSize = 13.sp)
       }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      Pill("Not now", primary = false, onClick = onClose, modifier = Modifier.weight(1f))
-      Pill("Allow", primary = true, onClick = onAllow, modifier = Modifier.weight(1f))
+      Pill(stringResource(R.string.action_not_now), primary = false, onClick = onClose, modifier = Modifier.weight(1f))
+      Pill(stringResource(R.string.action_allow), primary = true, onClick = onAllow, modifier = Modifier.weight(1f))
     }
   }
 }

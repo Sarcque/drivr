@@ -7,6 +7,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SpeedCamerasTest {
+  init {
+    app.drivr.i18n.TestStrings.install()
+  }
+
   // Route heading north along lon 5.0, ~11 km.
   private val route = (0..100).map { LatLng(52.0 + it * 0.001, 5.0) }
 

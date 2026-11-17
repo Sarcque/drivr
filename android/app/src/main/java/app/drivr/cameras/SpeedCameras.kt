@@ -1,5 +1,7 @@
 package app.drivr.cameras
 
+import app.drivr.i18n.L10n
+import app.drivr.R
 import app.drivr.places.LatLng
 import app.drivr.places.OverpassClient
 import app.drivr.places.RouteCorridor
@@ -7,11 +9,13 @@ import java.util.Locale
 import kotlin.math.abs
 import org.json.JSONObject
 
-enum class CameraKind(val label: String) {
-  SPEED("Speed camera"),
-  RED_LIGHT("Red-light camera"),
+enum class CameraKind(@androidx.annotation.StringRes val labelRes: Int) {
+  SPEED(R.string.camera_speed),
+  RED_LIGHT(R.string.camera_red_light),
   /** Average-speed section (trajectcontrole): start and end points. */
-  SECTION("Average speed check"),
+  SECTION(R.string.camera_section);
+
+  val label: String get() = L10n.s(labelRes)
 }
 
 /** A fixed enforcement point or section from OpenStreetMap. */

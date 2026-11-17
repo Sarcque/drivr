@@ -8,6 +8,10 @@ import org.junit.Test
 
 /** The race behind "find fuel": first useful answer wins, a dead server can't stall it. */
 class FirstUsefulTest {
+  init {
+    app.drivr.i18n.TestStrings.install()
+  }
+
   private fun src(delayMs: Long, headStart: Long = 0, result: () -> List<String>): Pair<Long, suspend () -> List<String>> =
       headStart to { delay(delayMs); result() }
 
