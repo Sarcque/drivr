@@ -25,6 +25,8 @@ data class Settings(
     val units: Units = Units.METRIC,
     /** Music card reachable from the driving menu. Off by default to keep the drive calm. */
     val musicWhileDriving: Boolean = false,
+    /** Offer a quicker way when a jam is ahead (the driver decides; never switches by itself). */
+    val fasterRoutes: Boolean = true,
 )
 
 /** Settings kept in SharedPreferences, exposed as a flow. */
@@ -46,6 +48,7 @@ class SettingsStore(context: Context) {
         .putBoolean("buildings3d", next.buildings3d)
         .putString("units", next.units.name)
         .putBoolean("musicWhileDriving", next.musicWhileDriving)
+        .putBoolean("fasterRoutes", next.fasterRoutes)
         .apply()
     DisplayUnits.imperial = next.units == Units.IMPERIAL
   }
@@ -61,6 +64,7 @@ class SettingsStore(context: Context) {
             trafficAlerts = prefs.getBoolean("trafficAlerts", d.trafficAlerts),
             buildings3d = prefs.getBoolean("buildings3d", d.buildings3d),
             musicWhileDriving = prefs.getBoolean("musicWhileDriving", d.musicWhileDriving),
+            fasterRoutes = prefs.getBoolean("fasterRoutes", d.fasterRoutes),
             units = runCatching { Units.valueOf(prefs.getString("units", d.units.name)!!) }.getOrDefault(d.units),
         )
         .also { DisplayUnits.imperial = it.units == Units.IMPERIAL }

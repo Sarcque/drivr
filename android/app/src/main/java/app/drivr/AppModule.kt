@@ -80,6 +80,17 @@ object AppModule {
     )
   }
 
+  /** The same Valhalla routing, asking for up to two alternatives (trip start and jam checks). */
+  val alternativeRoutes: AlternativeRoutesClient by lazy {
+    val provider =
+        WellKnownRouteProvider.Valhalla(BuildConfig.VALHALLA_URL, "auto")
+            .withJsonOptions(mapOf("units" to "kilometers", "language" to "en-GB", "alternates" to 2))
+    AlternativeRoutesClient(
+        OkHttpClient.Builder().callTimeout(Duration.ofSeconds(25)).build(),
+        uniffi.ferrostar.RouteAdapter.fromWellKnownRouteProvider(provider),
+    )
+  }
+
   /** Live Dutch traffic from NDW open data (free, no key). */
   val traffic: TrafficRepository by lazy {
     TrafficRepository(OkHttpClient.Builder().callTimeout(Duration.ofSeconds(30)).build())

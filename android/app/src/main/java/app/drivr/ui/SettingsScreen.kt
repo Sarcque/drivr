@@ -57,6 +57,7 @@ fun SettingsScreen(
       Section("Alerts") {
         Toggle("Speed cameras", "Fixed cameras and average-speed checks from OpenStreetMap", settings.speedCameras) { v -> onChange { it.copy(speedCameras = v) } }
         Toggle("Traffic alerts", "Jams, accidents and closures ahead (NDW, Netherlands)", settings.trafficAlerts) { v -> onChange { it.copy(trafficAlerts = v) } }
+        Toggle("Suggest faster routes", "When a jam is ahead, offer a quicker way. You choose; it never switches by itself", settings.fasterRoutes) { v -> onChange { it.copy(fasterRoutes = v) } }
       }
       Section("Music") {
         Toggle("Music controls while driving", "Adds Music to the driving menu; the card stays hidden until you open it",
