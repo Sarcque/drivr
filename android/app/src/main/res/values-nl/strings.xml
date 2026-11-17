@@ -190,4 +190,20 @@
         <item quantity="one">%1$d in de buurt</item>
         <item quantity="other">%1$d in de buurt</item>
     </plurals>
+    <!-- Route choice and faster routes -->
+    <string name="settings_faster_routes">Snellere routes voorstellen</string>
+    <string name="settings_faster_routes_sub">Bij file verderop een snellere weg aanbieden. Jij kiest; er wordt nooit vanzelf gewisseld</string>
+    <string name="route_choice_via">via %1$s</string>
+    <string name="route_choice_traffic_delay">%1$s vertraging door file</string>
+    <string name="route_choice_closed">Weg afgesloten op deze route</string>
+    <string name="route_choice_fastest">Snelste</string>
+    <string name="route_choice_same_time">Even snel</string>
+    <string name="route_choice_extra">+%1$s</string>
+    <string name="route_choice_live">Tijden inclusief actuele files</string>
+    <string name="route_choice_go">Rijden</string>
+    <string name="faster_route_title">Snellere route · %1$s sneller</string>
+    <string name="faster_route_jam">file op je route +%1$s</string>
+    <string name="faster_route_traffic">verkeer op je route</string>
+    <string name="faster_route_keep">Route houden</string>
+    <string name="faster_route_switch">Wisselen</string>
 </resources>

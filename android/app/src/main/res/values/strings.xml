@@ -191,4 +191,20 @@
         <item quantity="one">%1$d nearby</item>
         <item quantity="other">%1$d nearby</item>
     </plurals>
+    <!-- Route choice and faster routes -->
+    <string name="settings_faster_routes">Suggest faster routes</string>
+    <string name="settings_faster_routes_sub">When a jam is ahead, offer a quicker way. You choose; it never switches by itself</string>
+    <string name="route_choice_via">via %1$s</string>
+    <string name="route_choice_traffic_delay">%1$s traffic delay</string>
+    <string name="route_choice_closed">Road closed on this route</string>
+    <string name="route_choice_fastest">Fastest</string>
+    <string name="route_choice_same_time">Same time</string>
+    <string name="route_choice_extra">+%1$s</string>
+    <string name="route_choice_live">Times include live traffic</string>
+    <string name="route_choice_go">Go</string>
+    <string name="faster_route_title">Faster route · saves %1$s</string>
+    <string name="faster_route_jam">jam on your route +%1$s</string>
+    <string name="faster_route_traffic">traffic on your route</string>
+    <string name="faster_route_keep">Keep route</string>
+    <string name="faster_route_switch">Switch</string>
 </resources>

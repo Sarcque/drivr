@@ -70,6 +70,7 @@ fun SettingsScreen(
       Section(stringResource(R.string.settings_alerts)) {
         Toggle(stringResource(R.string.settings_cameras), stringResource(R.string.settings_cameras_sub), settings.speedCameras) { v -> onChange { it.copy(speedCameras = v) } }
         Toggle(stringResource(R.string.settings_traffic_alerts), stringResource(R.string.settings_traffic_alerts_sub), settings.trafficAlerts) { v -> onChange { it.copy(trafficAlerts = v) } }
+        Toggle(stringResource(R.string.settings_faster_routes), stringResource(R.string.settings_faster_routes_sub), settings.fasterRoutes) { v -> onChange { it.copy(fasterRoutes = v) } }
       }
       Section(stringResource(R.string.settings_music)) {
         Toggle(stringResource(R.string.settings_music_driving), stringResource(R.string.settings_music_driving_sub),

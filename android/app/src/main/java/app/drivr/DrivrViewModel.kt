@@ -7,6 +7,8 @@ import app.drivr.traffic.RouteTraffic
 import app.drivr.traffic.TrafficAhead
 import app.drivr.traffic.TrafficEvent
 import app.drivr.traffic.TrafficRepository
+import app.drivr.traffic.RouteChoice
+import app.drivr.traffic.ScoredRoute
 import app.drivr.cameras.CameraAhead
 import app.drivr.cameras.SectionTracker
 import app.drivr.cameras.SpeedCamera
@@ -57,6 +59,21 @@ sealed interface RouteStatus {
   data class Failed(val message: String, val canRetry: Boolean = true) : RouteStatus
 }
 
+/** Ways to the destination at the start of a trip, quickest (with live traffic) first. */
+data class RouteChoiceState(
+    val options: List<RouteOption>,
+    /** The one being driven; the others are drawn grey. */
+    val selected: Int = 0,
+)
+
+/** A quicker way found while driving, because of traffic on the current route. Never auto-applied. */
+data class FasterRouteState(
+    val option: RouteOption,
+    val savesSeconds: Double,
+    /** Expected delay on the current route ahead (traffic and closures). */
+    val currentDelaySeconds: Double,
+)
+
 /** The places panel: what was asked, what came back, and which place is open. */
 data class PlacesState(
     val open: Boolean = false,
@@ -87,6 +104,7 @@ class DrivrViewModel(
     private val placesRepo: PlacesRepository = AppModule.places,
     private val cameraClient: SpeedCameraClient = AppModule.speedCameras,
     private val settingsStore: app.drivr.settings.SettingsStore = AppModule.settings,
+    private val alternatives: AlternativeRoutesClient = AppModule.alternativeRoutes,
 ) : DefaultNavigationViewModel(core, valhallaExtendedOSRMAnnotationPublisher()) {
 
   private val hasLocationPermission = MutableStateFlow(false)
@@ -119,6 +137,18 @@ class DrivrViewModel(
           .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
   val settings: StateFlow<app.drivr.settings.Settings> = settingsStore.state
+
+  private val _routeChoice = MutableStateFlow<RouteChoiceState?>(null)
+  /** The route chooser shown at the start of a trip when there is more than one sensible way. */
+  val routeChoice = _routeChoice.asStateFlow()
+  private var choiceTimeout: Job? = null
+
+  private val _fasterRoute = MutableStateFlow<FasterRouteState?>(null)
+  /** A faster way around traffic ahead, waiting for the driver to switch or keep the route. */
+  val fasterRoute = _fasterRoute.asStateFlow()
+  private var fasterRouteJob: Job? = null
+  private var fasterRouteTimeout: Job? = null
+  private var lastFasterRouteCheckMs = 0L
 
   fun updateSettings(change: (app.drivr.settings.Settings) -> app.drivr.settings.Settings) {
     settingsStore.update(change)
@@ -158,6 +188,7 @@ class DrivrViewModel(
   init {
     traffic.start(viewModelScope)
     watchRouteForCameras()
+    viewModelScope.launch { trafficAhead.collect(::maybeLookForFasterRoute) }
     viewModelScope.launch {
       hasLocationPermission
           .flatMapLatest { granted ->
@@ -239,9 +270,15 @@ class DrivrViewModel(
       try {
         val dest = Waypoint(coordinate = to, kind = WaypointKind.BREAK)
         val waypoints = stops.map { it.waypoint() } + dest
-        // One quiet retry: the free routing server sometimes drops a request.
+        // Ask for alternatives too. If that fails, fall back to the plain request, with one quiet
+        // retry: the free routing server sometimes drops a request.
         val routes =
-            runCatching { core.getRoutes(from, waypoints) }
+            runCatching { alternatives.routes(from, waypoints) }
+                .recoverCatching {
+                  if (it is kotlinx.coroutines.CancellationException) throw it
+                  Log.w(TAG, "Routing with alternatives failed, trying the plain request", it)
+                  core.getRoutes(from, waypoints)
+                }
                 .recoverCatching {
                   if (it is kotlinx.coroutines.CancellationException) throw it
                   Log.w(TAG, "Routing failed once, retrying", it)
@@ -249,9 +286,13 @@ class DrivrViewModel(
                   core.getRoutes(from, waypoints)
                 }
                 .getOrThrow()
-        val route = routes.firstOrNull() ?: error(L10n.s(R.string.route_none))
-        check(route.geometry.size >= 2) { L10n.s(R.string.route_no_line) }
-        Log.i(TAG, "Route: ${route.geometry.size} points, ${route.distance.toInt()} m")
+                .filter { it.geometry.size >= 2 }
+        if (routes.isEmpty()) error(L10n.s(R.string.route_none))
+        // Valhalla's times have no live traffic: rank with the NDW jams on each route.
+        val ranked = rankRoutes(routes, traffic.events.value)
+        val route = ranked.first().route
+        Log.i(TAG, "Route: ${route.geometry.size} points, ${route.distance.toInt()} m, ${ranked.size} option(s)")
+        clearFasterRoute()
         if (simulate) locationProvider.enableSimulationOn(route)
         else locationProvider.disableSimulation()
         core.startNavigation(route = route)
@@ -261,6 +302,7 @@ class DrivrViewModel(
         simulating = simulate
         _places.value = _places.value.copy(stops = stops)
         _routeStatus.value = RouteStatus.Idle
+        showRouteChoice(ranked)
         _routeStarted.tryEmit(Unit)
       } catch (e: kotlinx.coroutines.CancellationException) {
         throw e
@@ -269,6 +311,130 @@ class DrivrViewModel(
         _routeStatus.value = RouteStatus.Failed(routingError(e))
       }
     }
+  }
+
+  // ---- Route choice: alternatives at the start, and a faster way around jams while driving -----
+
+  private fun showRouteChoice(ranked: List<RouteOption>) {
+    choiceTimeout?.cancel()
+    if (ranked.size < 2) {
+      _routeChoice.value = null
+      return
+    }
+    _routeChoice.value = RouteChoiceState(ranked.take(3))
+    // Gone by itself after a while, so the drive starts calm even if nobody taps it.
+    choiceTimeout = viewModelScope.launch {
+      kotlinx.coroutines.delay(CHOICE_VISIBLE_MS)
+      _routeChoice.value = null
+    }
+  }
+
+  /** Drive another of the routes offered at the start. */
+  fun chooseRoute(index: Int) {
+    val choice = _routeChoice.value ?: return
+    val option = choice.options.getOrNull(index) ?: return
+    if (index == choice.selected) return
+    _routeChoice.value = choice.copy(selected = index)
+    // Picking one restarts the countdown: they are looking at it.
+    showRouteChoiceTimeoutAgain()
+    if (simulating) locationProvider.enableSimulationOn(option.route)
+    core.startNavigation(route = option.route)
+    applyVoice()
+  }
+
+  private fun showRouteChoiceTimeoutAgain() {
+    choiceTimeout?.cancel()
+    choiceTimeout = viewModelScope.launch {
+      kotlinx.coroutines.delay(CHOICE_VISIBLE_MS)
+      _routeChoice.value = null
+    }
+  }
+
+  /** Close the chooser and drive the selected route. */
+  fun confirmRouteChoice() {
+    choiceTimeout?.cancel()
+    _routeChoice.value = null
+  }
+
+  /**
+   * When a jam (or closure) ahead costs real time, asks Valhalla once for other ways from here and
+   * offers the quickest if it saves enough. At most one check every few minutes; never switches
+   * by itself.
+   */
+  private fun maybeLookForFasterRoute(ahead: List<TrafficAhead>) {
+    if (!settingsStore.state.value.fasterRoutes) return
+    if (ahead.isEmpty() || _fasterRoute.value != null || _routeChoice.value != null) return
+    if (fasterRouteJob?.isActive == true) return
+    val now = System.currentTimeMillis()
+    if (now - lastFasterRouteCheckMs < FASTER_ROUTE_CHECK_EVERY_MS) return
+    val near = ahead.filter { it.distanceM < LOOK_AHEAD_M }
+    val delay = near.filter { it.event.kind != app.drivr.traffic.TrafficKind.ROAD_CLOSED }.sumOf { RouteChoice.delayOf(it) }
+    val closed = near.any { it.event.kind == app.drivr.traffic.TrafficKind.ROAD_CLOSED && it.endM != null }
+    if (delay < RouteChoice.MIN_SAVING_S && !closed) return
+    lastFasterRouteCheckMs = now
+    fasterRouteJob = viewModelScope.launch(Dispatchers.Default) { lookForFasterRoute() }
+  }
+
+  private suspend fun lookForFasterRoute() {
+    val ui = super.navigationUiState.value
+    if (!ui.isNavigating()) return
+    val from = ui.location ?: return
+    val progress = ui.progress ?: return
+    val waypoints =
+        (core.state.value.tripState as? uniffi.ferrostar.TripState.Navigating)?.remainingWaypoints?.takeIf { it.isNotEmpty() }
+            ?: destination?.let { listOf(it) }
+            ?: return
+    val routes =
+        try {
+          alternatives.routes(from, waypoints).filter { it.geometry.size >= 2 }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          Log.w(TAG, "Looking for a faster route failed", e)
+          return
+        }
+    val events = traffic.events.value
+    val currentGeometry = remainingGeometry(ui)?.map { LatLon(it.lat, it.lng) } ?: return
+    val (delay, closures) = RouteChoice.traffic(currentGeometry, events)
+    val current = ScoredRoute(progress.durationRemaining, progress.distanceRemaining, delay, closures)
+    val ranked = rankRoutes(routes, events)
+    val best = RouteChoice.betterThan(current, currentGeometry, ranked.map { it to it.score }) { it.geometry } ?: run {
+      Log.i(TAG, "No faster route than the current one (${ranked.size} checked)")
+      return
+    }
+    // Still the same trip, still nothing else on screen?
+    if (!super.navigationUiState.value.isNavigating() || _routeChoice.value != null) return
+    _fasterRoute.value =
+        FasterRouteState(
+            best.first,
+            savesSeconds = current.totalSeconds - best.second.totalSeconds,
+            currentDelaySeconds = current.totalSeconds - current.baseSeconds,
+        )
+    fasterRouteTimeout?.cancel()
+    fasterRouteTimeout = viewModelScope.launch {
+      // The offer goes stale as we drive on (we may pass the turn-off): drop it after a while.
+      kotlinx.coroutines.delay(FASTER_ROUTE_VISIBLE_MS)
+      _fasterRoute.value = null
+    }
+  }
+
+  /** The driver chose the faster route. */
+  fun switchToFasterRoute() {
+    val offer = _fasterRoute.value ?: return
+    clearFasterRoute()
+    if (simulating) locationProvider.enableSimulationOn(offer.option.route)
+    core.replaceRoute(offer.option.route)
+    applyVoice()
+  }
+
+  /** The driver keeps the current route. */
+  fun keepCurrentRoute() = clearFasterRoute()
+
+  private fun clearFasterRoute() {
+    fasterRouteTimeout?.cancel()
+    _fasterRoute.value = null
+    // Don't ask again straight away.
+    lastFasterRouteCheckMs = System.currentTimeMillis()
   }
 
   /** Fires when a new trip starts, so the map can show the whole route for a moment. */
@@ -446,6 +612,10 @@ class DrivrViewModel(
   override fun stopNavigation() {
     destination = null
     simulating = false
+    choiceTimeout?.cancel()
+    _routeChoice.value = null
+    fasterRouteJob?.cancel()
+    clearFasterRoute()
     _routeStatus.value = RouteStatus.Idle
     _places.value = PlacesState()
     locationProvider.disableSimulation()
@@ -454,5 +624,10 @@ class DrivrViewModel(
 
   companion object {
     private const val TAG = "DrivrViewModel"
+    private const val CHOICE_VISIBLE_MS = 15_000L
+    private const val FASTER_ROUTE_VISIBLE_MS = 45_000L
+    private const val FASTER_ROUTE_CHECK_EVERY_MS = 4 * 60_000L
+    /** Only jams this close count: further ones may clear before we get there. */
+    private const val LOOK_AHEAD_M = 60_000.0
   }
 }

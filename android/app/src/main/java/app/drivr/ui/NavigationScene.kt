@@ -54,6 +54,7 @@ import kotlin.math.roundToInt
 import uniffi.ferrostar.VisualInstructionContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -141,6 +142,13 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   val places by viewModel.places.collectAsState()
   val cameraList by viewModel.cameraList.collectAsState()
   val camerasAhead by viewModel.camerasAhead.collectAsState()
+  val routeChoice by viewModel.routeChoice.collectAsState()
+  val fasterRoute by viewModel.fasterRoute.collectAsState()
+  // Grey lines under the route: the other options at the start, or the faster way on offer.
+  val altRoutes =
+      routeChoice?.let { c -> c.options.filterIndexed { i, _ -> i != c.selected }.map { it.route.geometry } }
+          ?: fasterRoute?.let { listOf(it.option.route.geometry) }
+          ?: emptyList()
   androidx.activity.compose.BackHandler(enabled = places.open || places.selected != null) {
     if (places.selected != null) viewModel.selectPlace(null) else viewModel.closePlaces()
   }
@@ -189,7 +197,9 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   val inOverview = mapState.cameraMode == NavigationCameraMode.OVERVIEW
 
   fun showOverview() {
-    val box = uiState.routeGeometry?.boundingBox() ?: return
+    val route = uiState.routeGeometry ?: return
+    // With routes to choose from, fit all of them.
+    val box = (route + routeChoice?.options.orEmpty().flatMap { it.route.geometry }).boundingBox() ?: return
     mapState.showRouteOverview(
         box,
         PaddingValues(
@@ -205,6 +215,8 @@ fun NavigationScene(viewModel: DrivrViewModel) {
       kotlinx.coroutines.delay(400)
       showOverview()
       kotlinx.coroutines.delay(4000)
+      // Keep the whole picture while the route choice is open.
+      viewModel.routeChoice.first { it == null }
       if (mapState.cameraMode == NavigationCameraMode.OVERVIEW) mapState.recenter(isNavigating = true)
     }
   }
@@ -218,7 +230,12 @@ fun NavigationScene(viewModel: DrivrViewModel) {
         // No MapLibre ornaments: they sat under our cards. Attribution is in Settings and on the
         // start card.
         mapOptions = MapOptions(ornamentOptions = OrnamentOptions.AllDisabled),
-        routeOverlayBuilder = RouteOverlayBuilder(navigationPath = { DrivrRouteLine(it) }),
+        routeOverlayBuilder =
+            RouteOverlayBuilder(
+                navigationPath = {
+                  AlternativeRoutesLayer(altRoutes)
+                  DrivrRouteLine(it)
+                }),
         navigationCameraOptions =
             if (landscape) drivingCameraOptions(screenH, bottomCards = 24.dp, startPanel = sidePanelW)
             else drivingCameraOptions(screenH, bottomCards = bottomCardsH, topCards = topCardsH),
@@ -270,9 +287,31 @@ fun NavigationScene(viewModel: DrivrViewModel) {
         val delayS = trafficAhead.sumOf { it.event.delaySeconds ?: 0.0 }
         Column(m, verticalArrangement = Arrangement.spacedBy(10.dp)) {
           if (showMusic && musicAllowedNow) musicCard(Modifier)
-          DrivingAlert(
-              camerasAhead.first, camerasAhead.second,
-              if (settings.trafficAlerts) trafficAhead else emptyList())
+          val choice = routeChoice
+          val faster = fasterRoute
+          when {
+            // One card at a time above the arrival card: the route choice, a faster-route
+            // offer, or the usual camera/traffic alert.
+            choice != null ->
+                RouteChoiceCard(
+                    options = choice.options.map { it.score },
+                    selected = choice.selected,
+                    onSelect = viewModel::chooseRoute,
+                    onGo = viewModel::confirmRouteChoice,
+                )
+            faster != null ->
+                FasterRouteCard(
+                    savesSeconds = faster.savesSeconds,
+                    via = faster.option.score.via,
+                    currentDelaySeconds = faster.currentDelaySeconds,
+                    onSwitch = viewModel::switchToFasterRoute,
+                    onKeep = viewModel::keepCurrentRoute,
+                )
+            else ->
+                DrivingAlert(
+                    camerasAhead.first, camerasAhead.second,
+                    if (settings.trafficAlerts) trafficAhead else emptyList())
+          }
           TripCards(
               speedLimitKmh = uiState.speedLimitKmh(),
               speedKmh = uiState.location?.speed?.value?.let { (it * 3.6).roundToInt() },

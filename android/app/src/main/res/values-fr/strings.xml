@@ -190,4 +190,20 @@
         <item quantity="one">%1$d à proximité</item>
         <item quantity="other">%1$d à proximité</item>
     </plurals>
+    <!-- Route choice and faster routes -->
+    <string name="settings_faster_routes">Proposer des itinéraires plus rapides</string>
+    <string name="settings_faster_routes_sub">En cas de bouchon devant, propose un trajet plus rapide. Vous choisissez ; jamais de changement automatique</string>
+    <string name="route_choice_via">par %1$s</string>
+    <string name="route_choice_traffic_delay">%1$s de retard (trafic)</string>
+    <string name="route_choice_closed">Route fermée sur cet itinéraire</string>
+    <string name="route_choice_fastest">Plus rapide</string>
+    <string name="route_choice_same_time">Même durée</string>
+    <string name="route_choice_extra">+%1$s</string>
+    <string name="route_choice_live">Durées avec trafic en direct</string>
+    <string name="route_choice_go">Partir</string>
+    <string name="faster_route_title">Itinéraire plus rapide · %1$s de gagné</string>
+    <string name="faster_route_jam">bouchon sur votre trajet +%1$s</string>
+    <string name="faster_route_traffic">trafic sur votre trajet</string>
+    <string name="faster_route_keep">Garder l\'itinéraire</string>
+    <string name="faster_route_switch">Changer</string>
 </resources>
