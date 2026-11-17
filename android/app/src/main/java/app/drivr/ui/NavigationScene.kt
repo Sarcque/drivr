@@ -1,5 +1,7 @@
 package app.drivr.ui
 
+import androidx.compose.ui.res.stringResource
+import app.drivr.R
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -310,17 +312,17 @@ fun NavigationScene(viewModel: DrivrViewModel) {
     }
     val buttons: @Composable (Modifier) -> Unit = { m ->
       val primary = buildList {
-        if (navigating) add(MapAction("Search along the route", MapIcon.Search, viewModel::openPlaces))
-        if (!mapState.isTrackingUser) add(MapAction("Follow the car", MapIcon.Recenter) { mapState.recenter(navigating) })
-        else if (navigating) add(MapAction("Show the whole route", MapIcon.Overview, ::showOverview))
+        if (navigating) add(MapAction(stringResource(R.string.map_search_route), MapIcon.Search, viewModel::openPlaces))
+        if (!mapState.isTrackingUser) add(MapAction(stringResource(R.string.map_follow), MapIcon.Recenter) { mapState.recenter(navigating) })
+        else if (navigating) add(MapAction(stringResource(R.string.map_overview), MapIcon.Overview, ::showOverview))
       }
       val menu = buildList<Pair<String, () -> Unit>> {
         if (navigating) {
-          add("Turn list" to { showTurns = true })
-          if (settings.arEnabled) add("AR view" to { arManual = true })
-          if (settings.musicWhileDriving) add("Music" to { showMusic = !showMusic })
-          add("Settings" to { showSettings = true })
-          add("End trip" to viewModel::stopNavigation)
+          add(stringResource(R.string.menu_turns) to { showTurns = true })
+          if (settings.arEnabled) add(stringResource(R.string.menu_ar) to { arManual = true })
+          if (settings.musicWhileDriving) add(stringResource(R.string.menu_music) to { showMusic = !showMusic })
+          add(stringResource(R.string.menu_settings) to { showSettings = true })
+          add(stringResource(R.string.menu_end) to viewModel::stopNavigation)
         }
       }
       if (!places.open) MapButtonColumn(primary, menu, m)
@@ -395,6 +397,8 @@ fun NavigationScene(viewModel: DrivrViewModel) {
           settings, viewModel::updateSettings, onClose = { showSettings = false },
           musicAccess = musicState.hasAccess,
           onMusicAccess = { context.startActivity(music.accessSettingsIntent()) },
+          language = remember { app.drivr.i18n.AppLanguage.chosen(context) },
+          onLanguage = { tag -> context.findActivity()?.let { app.drivr.i18n.AppLanguage.set(it, tag) } },
       )
     }
   }
@@ -434,9 +438,9 @@ internal fun StartPanel(status: RouteStatus, onDemoDrive: () -> Unit, modifier: 
     Column(Modifier.weight(1f)) {
       when (status) {
         else -> {
-          Text("Long-press the map to go there", color = Drivr.text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-          Text("or try a simulated drive", color = Drivr.textMuted, fontSize = 13.sp)
-          Text("© OpenStreetMap contributors", color = Drivr.textMuted, fontSize = 10.sp)
+          Text(stringResource(R.string.browse_long_press), color = Drivr.text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+          Text(stringResource(R.string.browse_or_simulate), color = Drivr.textMuted, fontSize = 13.sp)
+          Text(stringResource(R.string.osm_credit), color = Drivr.textMuted, fontSize = 10.sp)
         }
       }
     }
@@ -444,7 +448,7 @@ internal fun StartPanel(status: RouteStatus, onDemoDrive: () -> Unit, modifier: 
       CircularProgressIndicator(Modifier.padding(horizontal = 16.dp).size(22.dp), color = Color.White, strokeWidth = 2.dp)
     } else {
       Button(onClick = onDemoDrive, colors = ButtonDefaults.buttonColors(containerColor = Drivr.accent)) {
-        Text("Test drive")
+        Text(stringResource(R.string.browse_test_drive))
       }
     }
   }
@@ -490,3 +494,10 @@ private fun RequestLocationPermission(viewModel: DrivrViewModel) {
     if (granted) viewModel.onLocationPermission(true) else launcher.launch(permissions.toTypedArray())
   }
 }
+
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? =
+    when (this) {
+      is android.app.Activity -> this
+      is android.content.ContextWrapper -> baseContext.findActivity()
+      else -> null
+    }

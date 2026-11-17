@@ -1,5 +1,7 @@
 package app.drivr.places
 
+import app.drivr.i18n.L10n
+import app.drivr.R
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -19,25 +21,25 @@ class PlacesException(message: String, cause: Throwable? = null) : Exception(mes
     fun http(code: Int, url: String) =
         PlacesException(
             when (code) {
-              429 -> "Too many requests to ${OverpassClient.hostOf(url)} (HTTP 429)"
-              in 500..599 -> "${OverpassClient.hostOf(url)} is busy (HTTP $code)"
-              else -> "${OverpassClient.hostOf(url)} answered HTTP $code"
+              429 -> L10n.s(R.string.places_err_too_many, OverpassClient.hostOf(url))
+              in 500..599 -> L10n.s(R.string.places_err_busy_http, OverpassClient.hostOf(url), code)
+              else -> L10n.s(R.string.places_err_http, OverpassClient.hostOf(url), code)
             })
 
     /** One message for a set of failures (all mirrors), naming the most telling cause. */
     fun from(errors: List<Exception>): PlacesException {
       val offline = errors.isNotEmpty() && errors.all { it is UnknownHostException }
-      if (offline) return PlacesException("No internet connection", errors.first())
+      if (offline) return PlacesException(L10n.s(R.string.places_err_offline), errors.first())
       val reasons = errors.map { reason(it) }.distinct()
-      return PlacesException("OpenStreetMap servers didn't answer: " + reasons.joinToString("; "), errors.firstOrNull())
+      return PlacesException(L10n.s(R.string.places_err_servers, reasons.joinToString("; ")), errors.firstOrNull())
     }
 
     fun reason(e: Throwable): String =
         when (e) {
-          is PlacesException -> e.message ?: "error"
-          is UnknownHostException -> "no internet"
-          is SocketTimeoutException -> "timed out"
-          is IOException -> e.message?.takeIf { it.isNotBlank() } ?: "network error"
+          is PlacesException -> e.message ?: L10n.s(R.string.places_reason_error)
+          is UnknownHostException -> L10n.s(R.string.places_reason_offline)
+          is SocketTimeoutException -> L10n.s(R.string.places_reason_timeout)
+          is IOException -> e.message?.takeIf { it.isNotBlank() } ?: L10n.s(R.string.places_reason_network)
           else -> e.message ?: e.javaClass.simpleName
         }
   }

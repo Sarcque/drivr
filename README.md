@@ -47,6 +47,12 @@ What works today:
   the next event on your side of the road, and reported delays added to the arrival time.
 - Settings (gear on the start screen, or ⋯ while driving): voice, AR, speed cameras, traffic,
   3D buildings, km or miles. AR is off by default.
+- Languages: English, Dutch, German, French and Spanish. Drivr follows the phone's language (on
+  Android 13+ also the per-app language in system settings) or the one picked in Settings. Menus,
+  lane prompts, alerts and errors come from `res/values-xx/strings.xml`; turn instructions and the
+  voice come from Valhalla in the same language. To add a language: copy `values/strings.xml` to
+  `values-xx/`, translate it, and add the tag to `AppLanguage.SUPPORTED` and
+  `res/xml/locales_config.xml`. `StringsCompletenessTest` fails if a key or placeholder is missing.
 - AR junction view (enable in Settings): camera with route ribbon, upright turn arrows and the direction sign. Opens
   ~300 m before each maneuver (Auto) or by hand. Pose from GPS course + gravity sensor, no ARCore.
 - Turn list with shields, destinations and lane advice ("Use lanes 4 & 5 of 5").

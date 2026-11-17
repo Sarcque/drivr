@@ -8,6 +8,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlacesTest {
+  init {
+    app.drivr.i18n.TestStrings.install()
+  }
+
   private fun route(): List<LatLng> {
     val arr = JSONArray(javaClass.getResource("/places/route_utrecht_amersfoort.json")!!.readText())
     return (0 until arr.length()).map { arr.getJSONArray(it).let { c -> LatLng(c.getDouble(1), c.getDouble(0)) } }

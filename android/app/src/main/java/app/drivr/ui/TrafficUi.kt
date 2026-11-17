@@ -1,5 +1,8 @@
 package app.drivr.ui
 
+import androidx.compose.ui.res.stringResource
+import app.drivr.i18n.L10n
+import app.drivr.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -128,8 +131,8 @@ fun TrafficAheadCard(next: TrafficAhead, modifier: Modifier = Modifier) {
   val e = next.event
   val details =
       listOfNotNull(
-          e.queueLengthM?.takeIf { it > 0 }?.let { "${formatDistance(it)} long" },
-          e.delaySeconds?.takeIf { it >= 60 }?.let { "+${(it / 60).roundToInt()} min" },
+          e.queueLengthM?.takeIf { it > 0 }?.let { L10n.s(R.string.traffic_queue_long, formatDistance(it)) },
+          e.delaySeconds?.takeIf { it >= 60 }?.let { L10n.s(R.string.delay_plus_min, (it / 60).roundToInt()) },
       )
   Row(
       modifier
@@ -148,7 +151,7 @@ fun TrafficAheadCard(next: TrafficAhead, modifier: Modifier = Modifier) {
     Spacer(Modifier.width(12.dp))
     Column {
       Text(
-          "${e.kind.label} in ${formatDistance(next.distanceM)}",
+          stringResource(R.string.event_in_distance, e.kind.label, formatDistance(next.distanceM)),
           color = Drivr.text,
           fontSize = 16.sp,
           fontWeight = FontWeight.SemiBold,
@@ -177,14 +180,14 @@ fun JamCountdownCard(jam: TrafficAhead, modifier: Modifier = Modifier) {
   ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
       Text(
-          "${jam.event.kind.label} · ${formatDistance(left)} to go",
+          stringResource(R.string.jam_to_go, jam.event.kind.label, formatDistance(left)),
           color = Drivr.text,
           fontSize = 16.sp,
           fontWeight = FontWeight.SemiBold,
           modifier = Modifier.weight(1f),
       )
       jam.secondsLeft?.let {
-        Text("~${(it / 60).roundToInt().coerceAtLeast(1)} min", color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.about_min, (it / 60).roundToInt().coerceAtLeast(1)), color = color, fontSize = 16.sp, fontWeight = FontWeight.Bold)
       }
     }
     Spacer(Modifier.height(10.dp))
@@ -204,9 +207,9 @@ fun JamCountdownCard(jam: TrafficAhead, modifier: Modifier = Modifier) {
     Spacer(Modifier.height(6.dp))
     Row {
       Text(
-          "${(jam.progress * 100).roundToInt()}% through",
+          stringResource(R.string.jam_progress, (jam.progress * 100).roundToInt()),
           color = Drivr.textMuted, fontSize = 13.sp, modifier = Modifier.weight(1f))
-      jam.lengthM?.let { Text("${formatDistance(it)} jam", color = Drivr.textMuted, fontSize = 13.sp) }
+      jam.lengthM?.let { Text(stringResource(R.string.jam_length, formatDistance(it)), color = Drivr.textMuted, fontSize = 13.sp) }
     }
   }
 }

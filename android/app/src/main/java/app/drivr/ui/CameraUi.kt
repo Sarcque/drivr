@@ -1,5 +1,7 @@
 package app.drivr.ui
 
+import androidx.compose.ui.res.stringResource
+import app.drivr.R
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -79,17 +81,17 @@ fun CameraAheadCard(next: CameraAhead, averageKmh: Double?, modifier: Modifier =
     Spacer(Modifier.width(12.dp))
     Column(Modifier.weight(1f)) {
       if (next.inside) {
-        Text("${cam.kind.label} · ${formatDistance(next.endM ?: 0.0)} left", color = Drivr.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(R.string.camera_left, cam.kind.label, formatDistance(next.endM ?: 0.0)), color = Drivr.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         val avg = averageKmh?.roundToInt()
         val over = avg != null && cam.maxSpeedKmh != null && avg > cam.maxSpeedKmh
         Text(
-            if (avg == null) "Measuring your average…" else "Your average $avg km/h",
+            if (avg == null) stringResource(R.string.camera_measuring) else stringResource(R.string.camera_average, avg),
             color = if (avg == null) Drivr.textMuted else if (over) Color(0xFFFF6B6B) else Drivr.ok,
             fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
       } else {
-        Text("${cam.kind.label} in ${formatDistance(next.distanceM)}", color = Drivr.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(R.string.event_in_distance, cam.kind.label, formatDistance(next.distanceM)), color = Drivr.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         next.endM?.let {
-          Text("Section ${formatDistance(it - next.distanceM)} long", color = Drivr.textMuted, fontSize = 14.sp)
+          Text(stringResource(R.string.camera_section_long, formatDistance(it - next.distanceM)), color = Drivr.textMuted, fontSize = 14.sp)
         }
       }
     }

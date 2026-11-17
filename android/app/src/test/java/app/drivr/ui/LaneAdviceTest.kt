@@ -7,6 +7,10 @@ import org.junit.Test
 import uniffi.ferrostar.LaneInfo
 
 class LaneAdviceTest {
+  init {
+    app.drivr.i18n.TestStrings.install()
+  }
+
   private val s = LaneInfo(false, listOf("straight"), null)
   private val r = LaneInfo(true, listOf("slight right"), "slight right")
   private val l = LaneInfo(true, listOf("slight left"), "slight left")

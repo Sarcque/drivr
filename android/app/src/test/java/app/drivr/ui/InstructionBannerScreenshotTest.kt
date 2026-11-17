@@ -25,6 +25,10 @@ import uniffi.ferrostar.VisualInstructionContent
  * (Utrecht Centraal to Amersfoort, 16 Nov 2026).
  */
 class InstructionBannerScreenshotTest {
+  init {
+    app.drivr.i18n.TestStrings.install()
+  }
+
   @get:Rule
   val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_6, showSystemUi = false)
 

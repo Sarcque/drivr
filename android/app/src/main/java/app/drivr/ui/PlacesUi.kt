@@ -1,5 +1,9 @@
 package app.drivr.ui
 
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import app.drivr.i18n.L10n
+import app.drivr.R
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -177,7 +181,7 @@ fun PlacesSearchBar(
     SearchGlyph(Drivr.textMuted, Modifier.size(18.dp))
     Spacer(Modifier.width(12.dp))
     Box(Modifier.weight(1f)) {
-      if (query.isEmpty()) Text("Where to?", color = Drivr.textMuted, fontSize = 17.sp)
+      if (query.isEmpty()) Text(stringResource(R.string.places_where_to), color = Drivr.textMuted, fontSize = 17.sp)
       BasicTextField(
           value = query,
           onValueChange = {
@@ -222,7 +226,7 @@ fun CategoryChips(
     }
     if (shown.size < PlaceCategory.entries.size) {
       Text(
-          "More",
+          stringResource(R.string.places_more),
           color = Drivr.text,
           fontSize = 14.sp,
           fontWeight = FontWeight.Medium,
@@ -272,11 +276,11 @@ fun PlacesSheet(
       CategoryChips(state.category, onSelectCategory, Modifier.padding(start = 16.dp, top = 10.dp, bottom = 8.dp), compact = true)
     }
     when {
-      state.loading -> Message("Looking nearby…", spinner = true)
+      state.loading -> Message(stringResource(R.string.places_looking), spinner = true)
       state.error != null -> ErrorMessage(state.error, onRetry)
-      state.results.isEmpty() && state.refining -> Message("Nothing right here. Checking the road ahead…", spinner = true)
+      state.results.isEmpty() && state.refining -> Message(stringResource(R.string.places_checking_ahead), spinner = true)
       state.results.isEmpty() && (state.category != null || state.query.isNotBlank()) ->
-          Message(if (state.alongRoute) "Nothing within reach of your route." else "Nothing found nearby.")
+          Message(stringResource(if (state.alongRoute) R.string.places_none_route else R.string.places_none_nearby))
       state.results.isEmpty() -> {}
       else ->
           LazyColumn(Modifier.heightIn(max = maxListHeight)) {
@@ -298,12 +302,12 @@ private fun StatusLine(s: PlacesState) {
     }
     val text =
         when {
-          s.loading -> "Searching…"
-          s.refining && s.results.isNotEmpty() -> "${s.results.size} close by · checking the road ahead"
+          s.loading -> stringResource(R.string.places_searching)
+          s.refining && s.results.isNotEmpty() -> pluralStringResource(R.plurals.places_close_by_checking, s.results.size, s.results.size)
           s.note != null -> s.note
-          s.results.isEmpty() -> if (s.category == null && s.query.isBlank()) "Pick a category or type a name" else ""
-          s.alongRoute && s.category != null -> "${s.results.size} on your route, in driving order"
-          else -> "${s.results.size} nearby"
+          s.results.isEmpty() -> if (s.category == null && s.query.isBlank()) stringResource(R.string.places_pick) else ""
+          s.alongRoute && s.category != null -> pluralStringResource(R.plurals.places_on_route, s.results.size, s.results.size)
+          else -> pluralStringResource(R.plurals.places_nearby, s.results.size, s.results.size)
         }
     Text(text, color = if (s.note != null && !s.refining) Drivr.hint else Drivr.textMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
   }
@@ -313,7 +317,7 @@ private fun sheetTitle(s: PlacesState): String =
     when {
       s.category != null -> s.category.label
       s.query.isNotBlank() -> s.query.trim()
-      else -> if (s.alongRoute) "Add a stop" else "Find a place"
+      else -> L10n.s(if (s.alongRoute) R.string.places_add_stop_title else R.string.places_find)
     }
 
 @Composable
@@ -346,7 +350,7 @@ private fun ErrorMessage(text: String, onRetry: () -> Unit) {
     Text(text, color = Drivr.textMuted, fontSize = 15.sp)
     Spacer(Modifier.height(10.dp))
     Text(
-        "Try again",
+        stringResource(R.string.action_try_again),
         color = Drivr.accent,
         fontSize = 15.sp,
         fontWeight = FontWeight.SemiBold,
@@ -368,7 +372,7 @@ fun PlaceRow(r: PlaceResult, onClick: () -> Unit, modifier: Modifier = Modifier)
     Spacer(Modifier.width(14.dp))
     Column(Modifier.weight(1f)) {
       Text(p.name, color = Drivr.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      val line = facts(p).take(2) + listOfNotNull("24/7".takeIf { p.is24h })
+      val line = facts(p).take(2) + listOfNotNull(stringResource(R.string.open_24_7).takeIf { p.is24h })
       if (line.isNotEmpty()) {
         Text(line.joinToString(" · "), color = Drivr.textMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
       }
@@ -393,15 +397,15 @@ private fun facts(p: Place): List<String> =
     when (p.category) {
       PlaceCategory.FUEL -> listOfNotNull(p.brand?.takeIf { !p.name.contains(it, ignoreCase = true) }) + p.fuels
       PlaceCategory.CHARGING ->
-          listOfNotNull(p.maxPowerKw?.let { "Up to ${Place.formatKw(it)}" }) + p.sockets.map { it.substringBefore(' ') }.distinct()
+          listOfNotNull(p.maxPowerKw?.let { L10n.s(R.string.places_up_to_kw, Place.formatKw(it)) }) + p.sockets.map { it.substringBefore(' ') }.distinct()
       PlaceCategory.FOOD, PlaceCategory.COFFEE -> listOfNotNull(p.cuisine, p.address)
       else -> listOfNotNull(p.brand?.takeIf { it != p.name }, p.address)
     }
 
 fun detourText(seconds: Double, estimate: Boolean): String {
   val min = (seconds / 60).roundToInt()
-  val t = if (min < 1) "<1 min" else "$min min"
-  return if (estimate) "+$t" else "Adds $t"
+  val t = if (min < 1) L10n.s(R.string.detour_less_than_min) else L10n.s(R.string.duration_min, min)
+  return if (estimate) "+$t" else L10n.s(R.string.detour_adds, t)
 }
 
 fun formatPrice(euro: Double): String = String.format(Locale.ROOT, "€%.3f", euro).replace('.', ',')
@@ -413,7 +417,7 @@ private fun cheapest(p: FuelPrices): Pair<String, Double>? =
 @Composable
 fun PriceCoverageNote(modifier: Modifier = Modifier) {
   Text(
-      "No pump prices: the Netherlands doesn't publish them as open data.",
+      stringResource(R.string.places_no_prices_nl),
       color = Drivr.inactive,
       fontSize = 12.sp,
       modifier = modifier,
@@ -457,9 +461,9 @@ fun PlaceDetailCard(
       addAll(p.fuels)
       addAll(p.sockets)
       p.cuisine?.let { add(it) }
-      if (p.is24h) add("24/7") else p.openingHours?.let { add(it) }
-      if (p.hasShop) add("Shop")
-      if (p.hasToilets) add("Toilets")
+      if (p.is24h) add(stringResource(R.string.open_24_7)) else p.openingHours?.let { add(it) }
+      if (p.hasShop) add(stringResource(R.string.places_shop))
+      if (p.hasToilets) add(stringResource(R.string.places_toilets))
     }.take(6)
     if (chips.isNotEmpty()) {
       Spacer(Modifier.height(12.dp))
@@ -482,10 +486,10 @@ fun PlaceDetailCard(
     Spacer(Modifier.height(16.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
       if (navigating) {
-        BigButton("Add stop", primary = true, onClick = onAddStop, modifier = Modifier.weight(1f))
-        BigButton("Go here", primary = false, onClick = onDrive, modifier = Modifier.weight(0.7f))
+        BigButton(stringResource(R.string.places_add_stop), primary = true, onClick = onAddStop, modifier = Modifier.weight(1f))
+        BigButton(stringResource(R.string.places_go_here), primary = false, onClick = onDrive, modifier = Modifier.weight(0.7f))
       } else {
-        BigButton("Drive here", primary = true, onClick = onDrive, modifier = Modifier.weight(1f))
+        BigButton(stringResource(R.string.places_drive_here), primary = true, onClick = onDrive, modifier = Modifier.weight(1f))
       }
     }
   }
@@ -496,10 +500,10 @@ private fun summary(r: PlaceResult, exactDetourS: Double?): String {
   val along = r.alongRouteM
   return if (along != null) {
     val extra = exactDetourS ?: r.detourS
-    listOfNotNull("${formatDistance(along)} ahead", extra?.let { detourText(it, estimate = exactDetourS == null) }, r.place.address)
+    listOfNotNull(L10n.s(R.string.places_ahead, formatDistance(along)), extra?.let { detourText(it, estimate = exactDetourS == null) }, r.place.address)
         .joinToString(" · ")
   } else {
-    listOfNotNull("${formatDistance(r.distanceM)} away", r.place.address).joinToString(" · ")
+    listOfNotNull(L10n.s(R.string.places_away, formatDistance(r.distanceM)), r.place.address).joinToString(" · ")
   }
 }
 
