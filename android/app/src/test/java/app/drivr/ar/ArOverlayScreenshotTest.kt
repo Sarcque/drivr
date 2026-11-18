@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
+import app.drivr.nav.RouteStanding
 import org.junit.Rule
 import org.junit.Test
 import uniffi.ferrostar.ManeuverModifier
@@ -51,16 +52,23 @@ class ArOverlayScreenshotTest {
       )
 
   @Composable
-  private fun Scene(pose: CameraPose, carY: Double = 0.0) {
+  private fun Scene(
+      pose: CameraPose,
+      carY: Double = 0.0,
+      standing: RouteStanding = RouteStanding.OnRoute,
+      routeOf: (List<Enu>) -> List<Enu> = { it },
+  ) {
     var size by remember { mutableStateOf(IntSize.Zero) }
     Box(Modifier.fillMaxSize().onSizeChanged { size = it }) {
       if (size.width == 0) return@Box
       val p = ArProjector(pose, size.width.toFloat(), size.height.toFloat())
       val shift = Enu(0.0, -carY)
       TestRoad(p, shift)
-      val ahead = routeAhead(route.map { it + shift }, 320.0, 2.0)
+      val ahead = routeAhead(routeOf(route.map { it + shift }), 400.0, 2.0)
       val toTurn = 90.0 - carY
-      ArOverlay(maneuver, toTurn, ArScene(pose.headingDeg, ahead, (toTurn / 2).toInt()), p)
+      Canvas(Modifier.fillMaxSize()) { drawArRoute(ahead, toTurn, standing, p, phaseM = 0.0) }
+      if (standing !is RouteStanding.OnRoute) StandingTint(standing)
+      ArChrome(maneuver, toTurn, standing, rerouting = false, locked = true, cameraOk = true, onClose = {})
     }
   }
 
@@ -89,6 +97,8 @@ class ArOverlayScreenshotTest {
       }
       // Carriageway: x from -7 to +1.75 (two lanes each way), and the exit lane bending right.
       quad(Enu(-7.5, 1.0 - shift.y), Enu(2.0, 1.0 - shift.y), Enu(2.0, 600.0), Enu(-7.5, 600.0), app.drivr.ui.Drivr.asphalt)
+      // Behind the car too, for the views facing back down the road.
+      quad(Enu(-7.5, -1.0 - shift.y), Enu(2.0, -1.0 - shift.y), Enu(2.0, -600.0), Enu(-7.5, -600.0), app.drivr.ui.Drivr.asphalt)
       quad(Enu(1.5, 80.0), Enu(5.0, 80.0), Enu(44.0, 140.0), Enu(38.0, 142.0), app.drivr.ui.Drivr.asphalt)
       fun line(x: Double, from: Double, to: Double, dashed: Boolean) {
         val a = p.project(Enu(x, maxOf(from, 1.0 - shift.y)) + shift, 0.5) ?: return
@@ -100,6 +110,14 @@ class ArOverlayScreenshotTest {
             5f,
             pathEffect = if (dashed) PathEffect.dashPathEffect(floatArrayOf(30f, 40f)) else null,
         )
+      }
+      for (x in listOf(-7.3 to false, -5.45 to true, -3.6 to false, -1.75 to true, 1.75 to false)) {
+        val a = p.project(Enu(x.first, -1.0), 0.5)
+        val b = p.project(Enu(x.first, -600.0) + shift, 0.5)
+        if (a != null && b != null)
+            drawLine(
+                Color(0xFFEDEDED), Offset(a.x, a.y), Offset(b.x, b.y), 5f,
+                pathEffect = if (x.second) PathEffect.dashPathEffect(floatArrayOf(30f, 40f)) else null)
       }
       line(-1.75, 1.0, 600.0, dashed = true)
       line(1.75, 1.0, 80.0, dashed = false)
@@ -117,5 +135,27 @@ class ArOverlayScreenshotTest {
   @Test
   fun at_the_exit_slightly_tilted_mount() {
     paparazzi.snapshot { Scene(CameraPose(headingDeg = 0.0, pitchDownDeg = 10.0, rollDeg = 2.0), carY = 60.0) }
+  }
+
+  @Test
+  fun wrong_way() {
+    // Facing south on the carriageway whose route runs north.
+    paparazzi.snapshot {
+      Scene(
+          CameraPose(headingDeg = 180.0, pitchDownDeg = 10.0),
+          carY = 40.0,
+          standing = RouteStanding.WrongWay(0L),
+      )
+    }
+  }
+
+  @Test
+  fun off_route() {
+    paparazzi.snapshot {
+      Scene(
+          CameraPose(headingDeg = 0.0, pitchDownDeg = 10.0),
+          standing = RouteStanding.OffRoute(140.0, -70.0),
+      )
+    }
   }
 }

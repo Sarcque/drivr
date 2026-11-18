@@ -133,7 +133,7 @@
     <string name="osm_credit">© OpenStreetMap contributors</string>
     <string name="browse_test_drive">Test drive</string>
     <string name="action_retry">Retry</string>
-    <string name="ar_hint">AR · phone on the dashboard, camera facing the road</string>
+    <string name="ar_hint">Phone on the dashboard, camera on the road</string>
     <string name="ar_map">Map</string>
     <string name="settings_title">Settings</string>
     <string name="action_done">Done</string>
@@ -207,4 +207,16 @@
     <string name="faster_route_traffic">traffic on your route</string>
     <string name="faster_route_keep">Keep route</string>
     <string name="faster_route_switch">Switch</string>
+    <string name="ar_wrong_way">Wrong way</string>
+    <string name="ar_turn_around">Turn around when it\'s safe</string>
+    <string name="voice_wrong_way">You are driving the wrong way. Turn around when it is safe.</string>
+    <string name="ar_off_route">Off route</string>
+    <string name="ar_route_left">Route %1$s to your left</string>
+    <string name="ar_route_right">Route %1$s to your right</string>
+    <string name="ar_route_ahead">Route %1$s ahead</string>
+    <string name="ar_route_behind">Route %1$s behind you</string>
+    <string name="ar_rerouting">Finding a new route…</string>
+    <string name="ar_aligning">Lining up with the road…</string>
+    <string name="ar_locked">Locked to the road</string>
+    <string name="ar_no_camera">Camera not available</string>
 </resources>

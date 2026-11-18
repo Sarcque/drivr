@@ -53,8 +53,17 @@ What works today:
   voice come from Valhalla in the same language. To add a language: copy `values/strings.xml` to
   `values-xx/`, translate it, and add the tag to `AppLanguage.SUPPORTED` and
   `res/xml/locales_config.xml`. `StringsCompletenessTest` fails if a key or placeholder is missing.
-- AR junction view (enable in Settings): camera with route ribbon, upright turn arrows and the direction sign. Opens
-  ~300 m before each maneuver (Auto) or by hand. Pose from GPS course + gravity sensor, no ARCore.
+- AR view (enable in Settings): the camera with the route laid on the road as a solid blue,
+  lane-wide carpet, white chevrons flowing along it and a big arrow painted through the turn.
+  Opens ~300 m before each maneuver (Auto) or by hand. No ARCore: heading comes from the gyroscope
+  (frame rate) corrected by the GPS course, tilt from the gravity sensor, and the phone mount is
+  learned from the camera image itself: on straight stretches the road's vanishing point (where
+  lane lines meet, found with a small edge-voting estimator in `ar/VanishingPoint.kt`) is straight
+  ahead of the car, so its offset from the image centre is how the phone is turned and tilted.
+  Between GPS fixes the car is moved along the route at its speed, so the carpet glides.
+- Wrong way and off route: raw GPS (not snapped to the route) is checked against the route. Driving
+  against it for a few seconds turns the banner (and the AR view) red with a U-turn sign and a
+  spoken "turn around"; leaving the route turns it amber with an arrow towards the route.
 - Turn list with shields, destinations and lane advice ("Use lanes 4 & 5 of 5").
 - Places: search bar and category chips (fuel, charging, food, coffee, groceries, shops, parking,
   rest stops) from OSM. The closest few show within a second or two; while driving the search then

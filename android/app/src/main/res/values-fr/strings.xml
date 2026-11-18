@@ -132,7 +132,7 @@
     <string name="osm_credit">© contributeurs OpenStreetMap</string>
     <string name="browse_test_drive">Essai</string>
     <string name="action_retry">Réessayer</string>
-    <string name="ar_hint">RA · téléphone sur le tableau de bord, caméra vers la route</string>
+    <string name="ar_hint">Téléphone sur le tableau de bord, caméra vers la route</string>
     <string name="ar_map">Carte</string>
     <string name="settings_title">Réglages</string>
     <string name="action_done">OK</string>
@@ -206,4 +206,16 @@
     <string name="faster_route_traffic">trafic sur votre trajet</string>
     <string name="faster_route_keep">Garder l\'itinéraire</string>
     <string name="faster_route_switch">Changer</string>
+    <string name="ar_wrong_way">Mauvais sens</string>
+    <string name="ar_turn_around">Faites demi-tour dès que possible</string>
+    <string name="voice_wrong_way">Vous roulez dans le mauvais sens. Faites demi-tour dès que vous pouvez le faire en sécurité.</string>
+    <string name="ar_off_route">Hors itinéraire</string>
+    <string name="ar_route_left">Itinéraire à %1$s sur votre gauche</string>
+    <string name="ar_route_right">Itinéraire à %1$s sur votre droite</string>
+    <string name="ar_route_ahead">Itinéraire à %1$s devant vous</string>
+    <string name="ar_route_behind">Itinéraire à %1$s derrière vous</string>
+    <string name="ar_rerouting">Recherche d\'un nouvel itinéraire…</string>
+    <string name="ar_aligning">Alignement sur la route…</string>
+    <string name="ar_locked">Calé sur la route</string>
+    <string name="ar_no_camera">Caméra indisponible</string>
 </resources>

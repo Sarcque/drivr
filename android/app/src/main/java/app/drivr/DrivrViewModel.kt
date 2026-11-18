@@ -124,6 +124,49 @@ class DrivrViewModel(
           }
           .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), NavigationUiState.empty())
 
+  /**
+   * Wrong way / off route, from the raw GPS fix (Ferrostar's own location is snapped to the route,
+   * course included, so it can't see a car driving against the route).
+   */
+  private val routeGuard = app.drivr.nav.RouteGuard()
+  private val _routeStanding = MutableStateFlow<app.drivr.nav.RouteStanding>(app.drivr.nav.RouteStanding.OnRoute)
+  val routeStanding: StateFlow<app.drivr.nav.RouteStanding> = _routeStanding.asStateFlow()
+
+  private fun checkRouteStanding(fix: UserLocation) {
+    val ui = super.navigationUiState.value
+    val geometry = ui.routeGeometry
+    if (!ui.isNavigating() || geometry == null || geometry.size < 2) {
+      routeGuard.reset()
+      _routeStanding.value = app.drivr.nav.RouteStanding.OnRoute
+      return
+    }
+    val before = _routeStanding.value
+    val now =
+        routeGuard.update(
+            app.drivr.nav.RawFix(
+                position = app.drivr.ar.LatLng(fix.coordinates.lat, fix.coordinates.lng),
+                courseDeg = fix.courseOverGround?.degrees?.toDouble(),
+                speedMps = fix.speed?.value ?: 0.0,
+                accuracyM = fix.horizontalAccuracy,
+                timeMs = fix.timestamp.toEpochMilli(),
+            ),
+            geometry.map { app.drivr.ar.LatLng(it.lat, it.lng) },
+        )
+    _routeStanding.value = now
+    if (now is app.drivr.nav.RouteStanding.WrongWay && before !is app.drivr.nav.RouteStanding.WrongWay) {
+      speak(L10n.s(R.string.voice_wrong_way))
+    }
+  }
+
+  /** Says [text] through the navigation voice (which honours the voice setting). */
+  private fun speak(text: String) {
+    runCatching {
+          core.spokenInstructionObserver?.onSpokenInstructionTrigger(
+              uniffi.ferrostar.SpokenInstruction(text, null, 0.0, java.util.UUID.randomUUID()))
+        }
+        .onFailure { Log.w(TAG, "Could not speak", it) }
+  }
+
   /** Live traffic events (NDW), and the ones on the route ahead, nearest first. */
   val trafficEvents: StateFlow<List<TrafficEvent>> = traffic.events
 
@@ -198,6 +241,7 @@ class DrivrViewModel(
           .collect {
             browsingLocation.value = it
             if (hasLocationPermission.value) liveFix.value = it
+            checkRouteStanding(it)
           }
     }
   }
