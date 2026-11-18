@@ -132,7 +132,7 @@
     <string name="osm_credit">© OpenStreetMap-bijdragers</string>
     <string name="browse_test_drive">Proefrit</string>
     <string name="action_retry">Opnieuw</string>
-    <string name="ar_hint">AR · telefoon op het dashboard, camera naar de weg</string>
+    <string name="ar_hint">Telefoon op het dashboard, camera op de weg</string>
     <string name="ar_map">Kaart</string>
     <string name="settings_title">Instellingen</string>
     <string name="action_done">Klaar</string>
@@ -206,4 +206,16 @@
     <string name="faster_route_traffic">verkeer op je route</string>
     <string name="faster_route_keep">Route houden</string>
     <string name="faster_route_switch">Wisselen</string>
+    <string name="ar_wrong_way">Verkeerde richting</string>
+    <string name="ar_turn_around">Keer om zodra het veilig kan</string>
+    <string name="voice_wrong_way">Je rijdt de verkeerde kant op. Keer om zodra het veilig kan.</string>
+    <string name="ar_off_route">Van de route af</string>
+    <string name="ar_route_left">Route %1$s links van je</string>
+    <string name="ar_route_right">Route %1$s rechts van je</string>
+    <string name="ar_route_ahead">Route %1$s voor je</string>
+    <string name="ar_route_behind">Route %1$s achter je</string>
+    <string name="ar_rerouting">Nieuwe route zoeken…</string>
+    <string name="ar_aligning">Uitlijnen op de weg…</string>
+    <string name="ar_locked">Vast op de weg</string>
+    <string name="ar_no_camera">Camera niet beschikbaar</string>
 </resources>

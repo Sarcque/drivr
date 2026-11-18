@@ -178,3 +178,60 @@ fun ribbonEdges(line: List<Enu>, halfWidthM: Double): Pair<List<Enu>, List<Enu>>
 }
 
 fun normalizeDeg(d: Double): Double = ((d % 360.0) + 360.0) % 360.0
+
+/**
+ * The part of [line] from [fromM] to [toM] metres along it, with the point at [fromM] interpolated
+ * exactly. Used to move the car along the route between GPS fixes (dead reckoning) so the carpet
+ * glides at frame rate instead of jumping once a second.
+ */
+fun sliceAlong(line: List<Enu>, fromM: Double, toM: Double = Double.MAX_VALUE): List<Enu> {
+  if (line.size < 2) return line
+  val out = ArrayList<Enu>()
+  var walked = 0.0
+  for (i in 0 until line.size - 1) {
+    val a = line[i]
+    val b = line[i + 1]
+    val len = hypot(b.x - a.x, b.y - a.y)
+    val end = walked + len
+    if (end >= fromM && walked <= toM && len > 1e-9) {
+      if (out.isEmpty()) out += a + (b - a) * ((fromM - walked).coerceAtLeast(0.0) / len)
+      if (end <= toM) out += b else {
+        out += a + (b - a) * ((toM - walked) / len)
+        break
+      }
+    }
+    walked = end
+  }
+  return out
+}
+
+/** [line] moved so its first point is the origin. */
+fun reOrigin(line: List<Enu>): List<Enu> {
+  if (line.isEmpty()) return line
+  val o = Enu(line[0].x, line[0].y)
+  return line.map { it - o }
+}
+
+/** Length of a polyline on the ground. */
+fun lengthM(line: List<Enu>): Double {
+  var s = 0.0
+  for (i in 1 until line.size) s += hypot(line[i].x - line[i - 1].x, line[i].y - line[i - 1].y)
+  return s
+}
+
+/** Point and unit direction at [atM] metres along [line], or null past its end. */
+fun pointAndDirectionAt(line: List<Enu>, atM: Double): Pair<Enu, Enu>? {
+  var walked = 0.0
+  for (i in 0 until line.size - 1) {
+    val a = line[i]
+    val b = line[i + 1]
+    val len = hypot(b.x - a.x, b.y - a.y)
+    if (len < 1e-9) continue
+    if (walked + len >= atM) {
+      val dir = Enu((b.x - a.x) / len, (b.y - a.y) / len)
+      return (a + dir * (atM - walked)) to dir
+    }
+    walked += len
+  }
+  return null
+}

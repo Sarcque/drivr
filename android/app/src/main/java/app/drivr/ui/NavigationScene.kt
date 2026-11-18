@@ -135,6 +135,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
 
   val uiState by viewModel.navigationUiState.collectAsState()
   val routeStatus by viewModel.routeStatus.collectAsState()
+  val routeStanding by viewModel.routeStanding.collectAsState()
   val mapState = rememberNavigationMapState()
   val trafficEvents by viewModel.trafficEvents.collectAsState()
   val trafficAhead by viewModel.trafficAhead.collectAsState()
@@ -258,6 +259,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
     if (showAr) {
       ArJunctionView(
           ui = uiState,
+          standing = routeStanding,
           onClose = {
             arManual = false
             arSnoozed = true
@@ -268,7 +270,10 @@ fun NavigationScene(viewModel: DrivrViewModel) {
 
     // ---- Slots: everything on top of the map lives in these, so nothing can overlap. ----------
     val banner: @Composable (Modifier) -> Unit = { m ->
-      uiState.visualInstruction?.let {
+      // Wrong way / off route replaces the turn banner: it is the one thing that matters then.
+      if (routeStanding !is app.drivr.nav.RouteStanding.OnRoute) {
+        RouteStandingCard(routeStanding, uiState.isCalculatingNewRoute == true, m)
+      } else uiState.visualInstruction?.let {
         InstructionBanner(
             instruction = it,
             distanceToManeuverMeters = uiState.progress?.distanceToNextManeuver,

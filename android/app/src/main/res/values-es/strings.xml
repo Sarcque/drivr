@@ -132,7 +132,7 @@
     <string name="osm_credit">© colaboradores de OpenStreetMap</string>
     <string name="browse_test_drive">Prueba</string>
     <string name="action_retry">Reintentar</string>
-    <string name="ar_hint">RA · móvil en el salpicadero, cámara hacia la carretera</string>
+    <string name="ar_hint">Móvil en el salpicadero, cámara hacia la carretera</string>
     <string name="ar_map">Mapa</string>
     <string name="settings_title">Ajustes</string>
     <string name="action_done">Listo</string>
@@ -206,4 +206,16 @@
     <string name="faster_route_traffic">tráfico en tu ruta</string>
     <string name="faster_route_keep">Mantener ruta</string>
     <string name="faster_route_switch">Cambiar</string>
+    <string name="ar_wrong_way">Sentido contrario</string>
+    <string name="ar_turn_around">Da la vuelta cuando sea seguro</string>
+    <string name="voice_wrong_way">Vas en sentido contrario. Da la vuelta cuando sea seguro.</string>
+    <string name="ar_off_route">Fuera de la ruta</string>
+    <string name="ar_route_left">Ruta a %1$s a tu izquierda</string>
+    <string name="ar_route_right">Ruta a %1$s a tu derecha</string>
+    <string name="ar_route_ahead">Ruta a %1$s delante</string>
+    <string name="ar_route_behind">Ruta a %1$s detrás de ti</string>
+    <string name="ar_rerouting">Buscando una ruta nueva…</string>
+    <string name="ar_aligning">Alineando con la carretera…</string>
+    <string name="ar_locked">Fijado a la carretera</string>
+    <string name="ar_no_camera">Cámara no disponible</string>
 </resources>
