@@ -28,7 +28,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.drivr.R
 import app.drivr.i18n.L10n
+import app.drivr.traffic.BorderInfo
+import app.drivr.traffic.BorderSource
 import app.drivr.traffic.ScoredRoute
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import androidx.compose.ui.res.stringResource
 import org.maplibre.compose.expressions.dsl.const
 import org.maplibre.compose.expressions.dsl.exponential
@@ -135,6 +140,7 @@ fun RouteChoiceCard(
               overflow = TextOverflow.Ellipsis,
           )
           trafficNote(o)?.let { (text, color) -> Text(text, color = color, fontSize = 12.sp, maxLines = 1) }
+          o.border?.let { BorderLines(it, o.borderDelaySeconds) }
         }
         val extra = o.totalSeconds - fastest
         if (i == fastestIndex) {
@@ -163,6 +169,45 @@ fun RouteChoiceCard(
     }
   }
 }
+
+/**
+ * What a route-choice row says about border checks: the check on this route (with a live delay and
+ * its source and time when one is reported), or that this route goes around it.
+ */
+@Composable
+private fun BorderLines(b: BorderInfo, extraDelayS: Double) {
+  if (b.controlsOnRoute.isNotEmpty())
+      Text(stringResource(R.string.route_controls_on, b.controlsOnRoute.size), color = TrafficColors.slow, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+  if (b.avoidsControls > 0)
+      Text(stringResource(R.string.route_controls_avoided, b.avoidsControls), color = Drivr.ok, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+  val c = b.crossing
+  if (c == null) {
+    b.avoids?.let { Text(stringResource(R.string.border_avoids, it.label), color = Drivr.ok, fontSize = 12.sp, lineHeight = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+    return
+  }
+  val r = b.report
+  val delay = r?.delaySeconds
+  val (text, color) =
+      when {
+        r != null && delay != null && delay >= 60 && r.namesCheck -> stringResource(R.string.border_check_delay, c.label, formatDuration(delay)) to TrafficColors.jam
+        r != null && delay != null && delay >= 60 -> stringResource(R.string.border_queue, c.label, formatDuration(delay)) to TrafficColors.jam
+        r != null -> stringResource(R.string.border_check_reported, c.label) to TrafficColors.slow
+        !b.liveChecked -> stringResource(R.string.border_check_no_live, c.label) to Drivr.textMuted
+        else -> stringResource(R.string.border_check_possible, c.label) to Drivr.hint
+      }
+  Text(text, color = color, fontSize = 12.sp, lineHeight = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+  if (r != null) {
+    val source =
+        stringResource(if (r.source == BorderSource.NDW) R.string.border_source_ndw else R.string.border_source_autobahn)
+    val line =
+        r.since?.let { stringResource(R.string.border_source, source, clock(it)) }
+            ?: stringResource(R.string.border_source_fetched, source, clock(r.fetchedAt))
+    Text(line, color = Drivr.textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+  }
+}
+
+/** Local wall-clock time, "07:12". */
+internal fun clock(t: Instant): String = DateTimeFormatter.ofPattern("HH:mm").format(t.atZone(ZoneId.systemDefault()))
 
 private fun trafficNote(o: ScoredRoute): Pair<String, Color>? =
     when {

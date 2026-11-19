@@ -81,15 +81,20 @@ object AppModule {
     )
   }
 
-  /** The same Valhalla routing, asking for up to two alternatives (trip start and jam checks). */
+  /** The same Valhalla routing, asking for up to three alternatives (trip start and jam checks). */
   val alternativeRoutes: AlternativeRoutesClient by lazy {
     val provider =
         WellKnownRouteProvider.Valhalla(BuildConfig.VALHALLA_URL, "auto")
-            .withJsonOptions(mapOf("units" to "kilometers", "language" to app.drivr.i18n.L10n.valhallaLanguage(), "alternates" to 2))
+            .withJsonOptions(mapOf("units" to "kilometers", "language" to app.drivr.i18n.L10n.valhallaLanguage(), "alternates" to 3))
     AlternativeRoutesClient(
         OkHttpClient.Builder().callTimeout(Duration.ofSeconds(25)).build(),
         uniffi.ferrostar.RouteAdapter.fromWellKnownRouteProvider(provider),
     )
+  }
+
+  /** Live border-check reports from the Autobahn GmbH open traffic API (free, no key). */
+  val borderReports: app.drivr.traffic.BorderReportsClient by lazy {
+    app.drivr.traffic.BorderReportsClient(OkHttpClient.Builder().callTimeout(Duration.ofSeconds(6)).build())
   }
 
   /** Live Dutch traffic from NDW open data (free, no key). */

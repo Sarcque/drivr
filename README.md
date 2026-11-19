@@ -15,6 +15,7 @@ data. No API keys, no paid services.
 | Places, speed cameras | OpenStreetMap via [Overpass](https://overpass-api.de) | ODbL, no key |
 | Typed search | [Photon](https://photon.komoot.io) (OSM geocoder) | Apache-2.0, no key |
 | Fuel prices (France) | [prix-carburants](https://www.prix-carburants.gouv.fr) open data | Licence Ouverte, no key |
+| Border checks / reported checks (Germany) | [Autobahn GmbH](https://verkehr.autobahn.de/o/autobahn) traffic API (same data as the Autobahn App) | public, no key |
 
 ## Layout
 
@@ -76,6 +77,20 @@ What works today:
 - Fuel prices where a government publishes them as free, keyless open data. France is wired in.
   The Netherlands and Belgium publish no per-station prices (only CBS national averages), so the
   app says so instead of showing stale crowd prices.
+- Route options at the start: up to three ways (Valhalla alternates, ranked with live traffic),
+  each with time, distance, "via A2" and its delay.
+- Border checks (NL → DE): when a route enters Germany at a crossing with a stationary German
+  check (Elten A3, Venlo A40/A61, Bocholtz A4, Gennep A57, Bad Nieuweschans A280, Elmpt A52),
+  Drivr also asks Valhalla for the best way around all of them (`exclude_polygons`, 150 m squares,
+  which keeps the request under Valhalla's 10 km outline cap) and shows it as an option, e.g.
+  through Babberich and Elten village. A delay is only shown when a live source reports one:
+  Autobahn GmbH warnings that name a border check, or a jam right at the crossing coming from the
+  Netherlands, plus NDW's queue on the Dutch side. Each report shows its source and time; offline
+  it says "no live info". No police or Marechaussee feed with check locations exists (their
+  presseportal RSS only carries press releases after the fact), so nothing is guessed.
+- Settings › Checks: "Always avoid border checks" drives the way around even when slower;
+  "Always avoid reported checks" routes around police/traffic checks the Autobahn GmbH reports on
+  the route, after a popup that says it can't be a 100% guarantee.
 - Jam countdown: inside a jam, a bar shows how far through it you are, metres and minutes left.
 - Speed cameras: fixed cameras, red-light cameras and average-speed sections (trajectcontroles)
   from OSM along the route, filtered to your direction. Inside a section it shows your running

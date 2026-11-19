@@ -15,10 +15,14 @@ data class ScoredRoute(
     val closures: Int,
     /** The road that sets this route apart from the others, e.g. "A2"; null if none stands out. */
     val via: String? = null,
+    /** Border check on this route (or the one it goes around), with any live report. */
+    val border: BorderInfo? = null,
+    /** Waiting at the border check reported live and not already in [trafficSeconds]. */
+    val borderDelaySeconds: Double = 0.0,
 ) {
   /** Expected time with traffic. A closure costs a lot: it usually means a long detour. */
   val totalSeconds: Double
-    get() = baseSeconds + trafficSeconds + closures * CLOSURE_PENALTY_S
+    get() = baseSeconds + trafficSeconds + borderDelaySeconds + closures * CLOSURE_PENALTY_S
 
   companion object {
     const val CLOSURE_PENALTY_S = 20 * 60.0
@@ -175,12 +179,17 @@ object RouteChoice {
     return if (total == 0.0) 1.0 else shared / total
   }
 
-  /** Routes that are really the same way as an earlier (better) one are dropped. */
-  fun <T> distinct(ranked: List<T>, geometryOf: (T) -> List<LatLon>): List<T> {
+  /**
+   * Routes that are really the same way as an earlier (better) one are dropped. [comparable] says
+   * whether two routes may be duplicates at all (e.g. not when they cross the border elsewhere).
+   */
+  fun <T> distinct(ranked: List<T>, geometryOf: (T) -> List<LatLon>): List<T> = distinct(ranked, geometryOf) { _, _ -> true }
+
+  fun <T> distinct(ranked: List<T>, geometryOf: (T) -> List<LatLon>, comparable: (T, T) -> Boolean): List<T> {
     val kept = ArrayList<T>()
     for (r in ranked) {
       val g = geometryOf(r)
-      if (kept.none { overlap(g, geometryOf(it)) >= SAME_ROUTE_OVERLAP && overlap(geometryOf(it), g) >= SAME_ROUTE_OVERLAP }) kept += r
+      if (kept.none { comparable(r, it) && overlap(g, geometryOf(it)) >= SAME_ROUTE_OVERLAP && overlap(geometryOf(it), g) >= SAME_ROUTE_OVERLAP }) kept += r
     }
     return kept
   }
