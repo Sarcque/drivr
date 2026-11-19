@@ -15,6 +15,7 @@ data. No API keys, no paid services.
 | Places, speed cameras | OpenStreetMap via [Overpass](https://overpass-api.de) | ODbL, no key |
 | Typed search | [Photon](https://photon.komoot.io) (OSM geocoder) | Apache-2.0, no key |
 | Fuel prices (France) | [prix-carburants](https://www.prix-carburants.gouv.fr) open data | Licence Ouverte, no key |
+| “Hey Drivr” voice commands | [Vosk](https://alphacephei.com/vosk/) offline speech recognition, small models per language (downloaded once, ~40 MB) | Apache-2.0, no key, on the phone |
 | Border checks / reported checks (Germany) | [Autobahn GmbH](https://verkehr.autobahn.de/o/autobahn) traffic API (same data as the Autobahn App) | public, no key |
 
 ## Layout
@@ -56,6 +57,16 @@ What works today:
   on the arrival card), and your speed turns red more than 3 km/h over the limit.
 - Settings › Route: avoid tolls, motorways or ferries. Sent to Valhalla as costing options on
   every request, reroutes included (avoid, not forbid: a ferry-only island still gets a route).
+- Settings › Voice commands (off by default): say “Hey Drivr” and a command, in English, Dutch,
+  German, French or Spanish (whichever language the app is in). Turning it on asks for the
+  microphone and downloads that language's Vosk model once (~40 MB); after that recognition runs on
+  the phone and no audio leaves it. It listens only while Drivr is on screen, with a green mic button
+  as the first map button (tap it to talk without the wake phrase). The recogniser is limited to
+  Drivr's own phrases, and a wake needs a greeting before the name (“hey driver”, “hé driver”, “oye
+  driver” …), so “driver” in a song doesn't trigger it. Commands: voice off/on, avoid tolls or
+  motorways (reroutes while driving), faster route, home, work, fuel / charging / parking nearby,
+  share arrival time, end trip (asks first; answer yes/no by voice), arrival time, next turn,
+  traffic ahead, yes/no for the faster-route and route-choice cards, “what can I say”.
 - Location from Android's own LocationManager (no Google Play Services).
 - Live traffic (Netherlands): accidents, jams, broken-down vehicles and closures from NDW, refreshed
   every 3 minutes. Shown on the map (jams turn the route red), a "Traffic jam in 4.2 km" card for

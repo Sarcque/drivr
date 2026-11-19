@@ -164,8 +164,56 @@ fun NavigationScene(viewModel: DrivrViewModel) {
 
   val settings by viewModel.settings.collectAsState()
   var showSettings by rememberSaveable { mutableStateOf(false) }
+
+  // "Hey Drivr": microphone only while Drivr is on screen, permission asked when switched on.
+  val voice by viewModel.voice.collectAsState()
+  val voiceModel by viewModel.voiceModel.collectAsState()
+  val voiceProblem by viewModel.voiceProblem.collectAsState()
+  val context = LocalContext.current
+  fun micGranted() = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+  var micAllowed by remember { mutableStateOf(micGranted()) }
+  val micLauncher =
+      rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        micAllowed = granted
+        viewModel.onMicPermission(granted)
+      }
+  fun askMic() {
+    val activity = context.findActivity()
+    // Denied for good: only the app's system settings can allow it now.
+    if (activity != null && !micGranted() && askedMicBefore(context) &&
+        !androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.RECORD_AUDIO)) {
+      context.startActivity(
+          android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", context.packageName, null)))
+    } else {
+      markAskedMic(context)
+      micLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+  }
+  androidx.lifecycle.compose.LifecycleStartEffect(viewModel) {
+    micAllowed = micGranted()
+    viewModel.onMicPermission(micAllowed)
+    viewModel.onAppOnScreen(true)
+    onStopOrDispose { viewModel.onAppOnScreen(false) }
+  }
+  val shareLabel = stringResource(R.string.menu_share_eta)
+  fun shareEta() {
+    viewModel.shareEtaText()?.let { text ->
+      val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, text)
+      context.startActivity(android.content.Intent.createChooser(send, shareLabel))
+    }
+  }
   androidx.activity.compose.BackHandler(enabled = showSettings) { showSettings = false }
   androidx.activity.compose.BackHandler(enabled = showTurns) { showTurns = false }
+
+  LaunchedEffect(viewModel) {
+    viewModel.voiceEvents.collect {
+      when (it) {
+        app.drivr.VoiceEvent.ShareEta -> shareEta()
+        app.drivr.VoiceEvent.AskEndTrip -> confirmEnd = true
+        app.drivr.VoiceEvent.CloseEndTrip -> confirmEnd = false
+      }
+    }
+  }
 
   // Music: one button next to the gear while browsing; while driving only via the "..." menu,
   // and only when enabled in Settings.
@@ -173,7 +221,6 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   val musicState by music.state.collectAsState()
   var showMusic by rememberSaveable { mutableStateOf(false) }
   val musicAllowedNow = !uiState.isNavigating() || settings.musicWhileDriving
-  val context = LocalContext.current
   val musicCard: @Composable (Modifier) -> Unit = { m ->
     MusicCard(
         state = musicState,
@@ -261,6 +308,8 @@ fun NavigationScene(viewModel: DrivrViewModel) {
     }
   }
 
+  val voiceCardShown = voice !is app.drivr.voice.VoiceUi.Off && voice !is app.drivr.voice.VoiceUi.Waiting
+
   BoxWithConstraints(Modifier.fillMaxSize().background(Drivr.card)) {
     val screenH = maxHeight
     NavigationMapView(
@@ -335,7 +384,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
     // Camera / traffic alert: under the banner (not over the car), swipe to dismiss. Hidden
     // while a route choice or faster-route offer is on screen, so there is one thing at a time.
     val alert: @Composable () -> Unit = {
-      if (uiState.progress != null && routeChoice == null && fasterRoute == null) {
+      if (uiState.progress != null && routeChoice == null && fasterRoute == null && !voiceCardShown) {
         DrivingAlert(
             camerasAhead.first, camerasAhead.second,
             if (settings.trafficAlerts) trafficAhead else emptyList(),
@@ -345,6 +394,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
       }
     }
     val status: @Composable (Modifier) -> Unit = { m ->
+      VoiceCard(voice, viewModel::dismissVoice)
       RouteStatusCard(routeStatus, viewModel::retryRoute, viewModel::dismissRouteStatus, m)
     }
     val tripCards: @Composable (Modifier) -> Unit = { m ->
@@ -415,6 +465,8 @@ fun NavigationScene(viewModel: DrivrViewModel) {
     }
     val buttons: @Composable (Modifier) -> Unit = { m ->
       val primary = buildList {
+        // Listening for "Hey Drivr": always the first button, so it can't fold into the menu.
+        if (voice != app.drivr.voice.VoiceUi.Off) add(MapAction(stringResource(R.string.voice_mic_desc), MapIcon.Mic, viewModel::tapVoice))
         if (navigating) add(MapAction(stringResource(R.string.map_search_route), MapIcon.Search, viewModel::openPlaces))
         if (!mapState.isTrackingUser) add(MapAction(stringResource(R.string.map_follow), MapIcon.Recenter) { mapState.recenter(navigating) })
         else if (navigating) add(MapAction(stringResource(R.string.map_overview), MapIcon.Overview, ::showOverview))
@@ -425,16 +477,10 @@ fun NavigationScene(viewModel: DrivrViewModel) {
               else MapAction(stringResource(R.string.map_unmute), MapIcon.Muted, viewModel::toggleMute))
         }
       }
-      val shareLabel = stringResource(R.string.menu_share_eta)
       val menu = buildList<Pair<String, () -> Unit>> {
         if (navigating) {
           add(stringResource(R.string.menu_turns) to { showTurns = true })
-          add(shareLabel to {
-            viewModel.shareEtaText()?.let { text ->
-              val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, text)
-              context.startActivity(android.content.Intent.createChooser(send, shareLabel))
-            }
-          })
+          add(shareLabel to { shareEta() })
           if (settings.arEnabled) add(stringResource(R.string.menu_ar) to { arManual = true })
           if (settings.musicWhileDriving) add(stringResource(R.string.menu_music) to { showMusic = !showMusic })
           add(stringResource(R.string.menu_settings) to { showSettings = true })
@@ -555,7 +601,16 @@ fun NavigationScene(viewModel: DrivrViewModel) {
     }
     if (showSettings) {
       SettingsScreen(
-          settings, viewModel::updateSettings, onClose = { showSettings = false },
+          settings,
+          { change ->
+            val before = settings.voiceCommands
+            viewModel.updateSettings(change)
+            // Switched on: ask for the microphone now (not before), then fetch the speech model.
+            if (!before && viewModel.settings.value.voiceCommands) {
+              if (micGranted()) viewModel.onMicPermission(true) else askMic()
+            }
+          },
+          onClose = { showSettings = false },
           musicAccess = musicState.hasAccess,
           onMusicAccess = { context.startActivity(music.accessSettingsIntent()) },
           language = remember { app.drivr.i18n.AppLanguage.chosen(context) },
@@ -567,14 +622,29 @@ fun NavigationScene(viewModel: DrivrViewModel) {
           },
           onClearSaved = viewModel::clearSavedPlace,
           onClearRecents = viewModel::clearRecents,
+          voice =
+              VoiceSettingsState(
+                  model = voiceModel,
+                  modelMb = app.drivr.voice.SpeechModel.forLanguage(app.drivr.i18n.L10n.locale.language).sizeMb,
+                  micAllowed = micAllowed,
+                  problem = voiceProblem,
+                  downloadedMb = remember(voiceModel, settings.voiceCommands) { viewModel.speechModelsMb() },
+                  onAskMic = ::askMic,
+                  onDownload = viewModel::downloadSpeechModel,
+                  onDelete = viewModel::deleteSpeechModels,
+              ),
       )
     }
     if (confirmEnd && navigating) {
       ConfirmEndTrip(
           destination = viewModel.destinationLabel,
-          onKeep = { confirmEnd = false },
+          onKeep = {
+            confirmEnd = false
+            viewModel.onEndTripClosed()
+          },
           onEnd = {
             confirmEnd = false
+            viewModel.onEndTripClosed()
             viewModel.stopNavigation()
           },
       )
@@ -666,3 +736,9 @@ private tailrec fun android.content.Context.findActivity(): android.app.Activity
       is android.content.ContextWrapper -> baseContext.findActivity()
       else -> null
     }
+
+private fun askedMicBefore(context: android.content.Context) =
+    context.getSharedPreferences("drivr_settings", android.content.Context.MODE_PRIVATE).getBoolean("askedMic", false)
+
+private fun markAskedMic(context: android.content.Context) =
+    context.getSharedPreferences("drivr_settings", android.content.Context.MODE_PRIVATE).edit().putBoolean("askedMic", true).apply()

@@ -152,4 +152,20 @@ object AppModule {
   val music: app.drivr.music.MusicController by lazy { app.drivr.music.MusicController(appContext) }
 
   val ttsObserver: AndroidTtsObserver by lazy { AndroidTtsObserver(appContext) }
+
+  /** "Hey Drivr": offline speech models and the microphone listener (only used when switched on). */
+  val voice: app.drivr.voice.VoiceEngine by lazy {
+    app.drivr.voice.VoiceEngine(appContext, OkHttpClient.Builder().readTimeout(Duration.ofSeconds(60)).build())
+  }
+
+  /** The navigation voice's engine, so voice commands can tell when Drivr itself is talking. */
+  @Volatile var tts: android.speech.tts.TextToSpeech? = null
+  @Volatile private var lastSpokeMs = 0L
+
+  /** True while Drivr is speaking and briefly after, so the recogniser doesn't hear Drivr's own voice. */
+  fun drivrIsSpeaking(): Boolean {
+    val now = android.os.SystemClock.elapsedRealtime()
+    if (tts?.isSpeaking == true) lastSpokeMs = now
+    return now - lastSpokeMs < 700
+  }
 }

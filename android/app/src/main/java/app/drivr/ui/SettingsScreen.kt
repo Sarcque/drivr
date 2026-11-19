@@ -60,10 +60,11 @@ fun SettingsScreen(
     onEditSaved: (app.drivr.PlanField) -> Unit = {},
     onClearSaved: (app.drivr.PlanField) -> Unit = {},
     onClearRecents: () -> Unit = {},
+    voice: VoiceSettingsState = VoiceSettingsState(),
 ) {
   var disclaimer by remember { mutableStateOf(showChecksDisclaimer) }
   Box(modifier.fillMaxSize()) {
-  SettingsContent(settings, onChange, onClose, musicAccess, onMusicAccess, language, onLanguage, saved, onEditSaved, onClearSaved, onClearRecents) { disclaimer = true }
+  SettingsContent(settings, onChange, onClose, musicAccess, onMusicAccess, language, onLanguage, saved, onEditSaved, onClearSaved, onClearRecents, voice) { disclaimer = true }
   if (disclaimer) {
     ChecksDisclaimer(
         onCancel = { disclaimer = false },
@@ -128,6 +129,7 @@ private fun SettingsContent(
     onEditSaved: (app.drivr.PlanField) -> Unit,
     onClearSaved: (app.drivr.PlanField) -> Unit,
     onClearRecents: () -> Unit,
+    voice: VoiceSettingsState,
     askDisclaimer: () -> Unit,
 ) {
   Column(Modifier.fillMaxSize().background(Color(0xFF0E1013)).statusBarsPadding().navigationBarsPadding()) {
@@ -143,6 +145,7 @@ private fun SettingsContent(
         Toggle(stringResource(R.string.settings_ar), stringResource(R.string.settings_ar_sub), settings.arEnabled) { v -> onChange { it.copy(arEnabled = v) } }
         Toggle(stringResource(R.string.settings_ar_auto), stringResource(R.string.settings_ar_auto_sub), settings.arAuto, enabled = settings.arEnabled) { v -> onChange { it.copy(arAuto = v) } }
       }
+      Section(stringResource(R.string.settings_voice_commands_section)) { VoiceCommandsSettings(settings, onChange, voice) }
       Section(stringResource(R.string.settings_route)) {
         Toggle(stringResource(R.string.settings_avoid_tolls), stringResource(R.string.settings_avoid_tolls_sub), settings.avoidTolls) { v -> onChange { it.copy(avoidTolls = v) } }
         Toggle(stringResource(R.string.settings_avoid_motorways), stringResource(R.string.settings_avoid_motorways_sub), settings.avoidMotorways) { v -> onChange { it.copy(avoidMotorways = v) } }
@@ -200,6 +203,74 @@ private fun SettingsContent(
       Text(
           stringResource(R.string.settings_credits),
           color = Drivr.inactive, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
+    }
+  }
+}
+
+/** Everything the voice-commands section needs to know and do, from the view model. */
+data class VoiceSettingsState(
+    val model: app.drivr.voice.ModelState = app.drivr.voice.ModelState.Missing,
+    /** Size of this language's speech model, for the explanation. */
+    val modelMb: Int = 40,
+    val micAllowed: Boolean = false,
+    /** "unsupported" when the speech engine can't run here. */
+    val problem: String? = null,
+    /** Space used by downloaded models (0 when none). */
+    val downloadedMb: Int = 0,
+    /** Open with "What you can say" expanded (screenshots). */
+    val examplesOpen: Boolean = false,
+    val onAskMic: () -> Unit = {},
+    val onDownload: () -> Unit = {},
+    val onDelete: () -> Unit = {},
+)
+
+/** "Hey Drivr": the switch, where it stands (permission, download), examples, and freeing the space. */
+@Composable
+private fun VoiceCommandsSettings(settings: Settings, onChange: ((Settings) -> Settings) -> Unit, voice: VoiceSettingsState) {
+  Toggle(stringResource(R.string.settings_voice_commands), stringResource(R.string.settings_voice_commands_sub, voice.modelMb), settings.voiceCommands) { v ->
+    onChange { it.copy(voiceCommands = v) }
+  }
+  if (settings.voiceCommands) {
+    val m = voice.model
+    val (text, color, action) =
+        when {
+          voice.problem == "unsupported" -> Triple(stringResource(R.string.voice_status_unsupported), Drivr.hint, null)
+          !voice.micAllowed -> Triple(stringResource(R.string.voice_status_no_mic), Drivr.accent, voice.onAskMic)
+          m is app.drivr.voice.ModelState.Downloading ->
+              Triple(
+                  m.fraction?.let { stringResource(R.string.voice_status_downloading, (it * 100).toInt()) }
+                      ?: stringResource(R.string.voice_status_downloading_unknown),
+                  Drivr.textMuted, null)
+          m is app.drivr.voice.ModelState.Failed -> Triple(stringResource(R.string.voice_status_failed), Drivr.hint, voice.onDownload)
+          m == app.drivr.voice.ModelState.Missing -> Triple(stringResource(R.string.voice_status_missing, voice.modelMb), Drivr.accent, voice.onDownload)
+          else -> Triple(stringResource(R.string.voice_status_ready), Drivr.ok, null)
+        }
+    Row(
+        Modifier.fillMaxWidth().clickable(enabled = action != null) { action?.invoke() }.padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+      MicGlyph(color, Modifier.size(18.dp))
+      Spacer(Modifier.size(10.dp))
+      Text(text, color = color, fontSize = 14.sp, modifier = Modifier.weight(1f))
+    }
+    val dl = voice.model as? app.drivr.voice.ModelState.Downloading
+    if (dl != null) {
+      androidx.compose.material3.LinearProgressIndicator(
+          progress = { dl.fraction ?: 0f },
+          modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+          color = Drivr.accent,
+          trackColor = Drivr.cardBand,
+      )
+    }
+    var open by remember { mutableStateOf(voice.examplesOpen) }
+    Row(Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+      Text(stringResource(R.string.settings_voice_examples), color = Drivr.text, fontSize = 16.sp, modifier = Modifier.weight(1f))
+      Text(if (open) "▴" else "▾", color = Drivr.accent, fontSize = 18.sp)
+    }
+    if (open) VoiceExamples(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp))
+  } else if (voice.downloadedMb > 0) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = voice.onDelete).padding(horizontal = 16.dp, vertical = 14.dp)) {
+      Text(stringResource(R.string.settings_voice_delete, voice.downloadedMb), color = Drivr.accent, fontSize = 16.sp)
     }
   }
 }

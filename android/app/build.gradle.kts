@@ -46,6 +46,9 @@ android {
     }
     packaging {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        // Vosk's speech engine only for phones (ARM); saves ~20 MB. On x86 emulators voice
+        // commands report "not available on this device".
+        jniLibs { excludes += setOf("lib/x86/libvosk.so", "lib/x86_64/libvosk.so") }
     }
 }
 
@@ -73,6 +76,9 @@ dependencies {
     implementation(libs.camerax.camera2)
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.view)
+
+    // "Hey Drivr" voice commands: Vosk offline speech recognition (Apache-2.0, no key, no cloud).
+    implementation(libs.vosk.android)
 
     implementation(platform(libs.okhttp.bom))
     implementation(libs.okhttp)
