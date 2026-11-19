@@ -231,13 +231,13 @@ class BasicsScreenshotTest {
   /** Settings: route preferences and saved places (the screen scrolled to them). */
   @Test
   fun settings_route_saved() {
-    paparazzi.snapshot { ScrolledSettings(offset = 330) }
+    paparazzi.snapshot { ScrolledSettings(offset = 505) }
   }
 
   /** Settings, further down: Developer › Test drive button (off by default). */
   @Test
   fun settings_developer() {
-    paparazzi.snapshot { ScrolledSettings(offset = 1150) }
+    paparazzi.snapshot { ScrolledSettings(offset = 1325) }
   }
 
   /** The settings screen as if scrolled down by [offset] dp (Paparazzi can't scroll). */
@@ -246,7 +246,7 @@ class BasicsScreenshotTest {
     Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF0E1013))) {
       Box(
           Modifier.wrapContentHeight(align = Alignment.Top, unbounded = true)
-              .requiredHeight(2400.dp)
+              .requiredHeight(2600.dp)
               .offset(y = (-offset).dp)
       ) {
         SettingsScreen(Settings(avoidTolls = true), {}, {}, saved = saved)

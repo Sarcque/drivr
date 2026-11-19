@@ -52,11 +52,14 @@ class MainActivity : ComponentActivity(), AndroidTtsStatusListener {
 
   override fun onTtsInitialized(tts: TextToSpeech?, status: Int) {
     tts?.language = L10n.locale
+    AppModule.tts = tts
   }
 
   override fun onTtsSpeakError(utteranceId: String, status: Int) {
     Log.e("MainActivity", "TTS error for $utteranceId: $status")
   }
 
-  override fun onTtsShutdownAndRelease() {}
+  override fun onTtsShutdownAndRelease() {
+    AppModule.tts = null
+  }
 }

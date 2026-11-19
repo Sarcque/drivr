@@ -46,7 +46,9 @@ import app.drivr.RouteStatus
 /** One map action in the button column. */
 data class MapAction(val label: String, val icon: MapIcon, val onClick: () -> Unit)
 
-enum class MapIcon { Search, Overview, Recenter, More, Sound, Muted }
+enum class MapIcon { Search, Overview, Recenter, More, Sound, Muted,
+  /** Voice commands are listening for "Hey Drivr": green mic with a green ring. */
+  Mic }
 
 private val ButtonSize = 52.dp
 private val ButtonGap = 10.dp
@@ -104,6 +106,10 @@ fun MapRoundButton(icon: MapIcon, label: String, onClick: () -> Unit, modifier: 
       contentAlignment = Alignment.Center,
   ) {
     when (icon) {
+      MapIcon.Mic -> {
+        Canvas(Modifier.size(ButtonSize)) { drawCircle(Drivr.ok, size.minDimension / 2 - 1.5.dp.toPx(), style = Stroke(2.dp.toPx())) }
+        MicGlyph(Drivr.ok)
+      }
       MapIcon.Search -> SearchGlyph(Drivr.text)
       MapIcon.More ->
           Canvas(Modifier.size(18.dp)) {

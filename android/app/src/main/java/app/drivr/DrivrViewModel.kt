@@ -106,6 +106,9 @@ sealed interface RouteStart {
 }
 
 /** A field of the route planner, or a saved place being set. */
+/** Voice commands that need the screen (an Activity) to finish. */
+enum class VoiceEvent { ShareEta, AskEndTrip, CloseEndTrip }
+
 enum class PlanField { FROM, TO, HOME, WORK }
 
 /**
@@ -1019,6 +1022,303 @@ class DrivrViewModel(
     _places.value = PlacesState()
     locationProvider.disableSimulation()
     core.stopNavigation()
+  }
+
+  // ---- "Hey Drivr" voice commands ----------------------------------------------------------------
+
+  private val voiceEngine by lazy { AppModule.voice }
+  private val assistant by lazy {
+    app.drivr.voice.VoiceAssistant(app.drivr.voice.CommandGrammar.forLanguage(L10n.locale.language), ::runVoiceCommand)
+  }
+  private val _voice = MutableStateFlow<app.drivr.voice.VoiceUi>(app.drivr.voice.VoiceUi.Off)
+  /** The voice card on the map: mic chip, "Listening…", the answer. */
+  val voice: StateFlow<app.drivr.voice.VoiceUi> = _voice.asStateFlow()
+  val voiceModel: StateFlow<app.drivr.voice.ModelState> get() = voiceEngine.state
+  private val _voiceProblem = MutableStateFlow<String?>(null)
+  /** "unsupported" when the speech engine can't run on this phone; otherwise the last error, or null. */
+  val voiceProblem: StateFlow<String?> = _voiceProblem.asStateFlow()
+  private val _voiceEvents = kotlinx.coroutines.flow.MutableSharedFlow<VoiceEvent>(extraBufferCapacity = 4)
+  /** Things only the screen can do: the share sheet, the end-trip question. */
+  val voiceEvents: kotlinx.coroutines.flow.SharedFlow<VoiceEvent> = _voiceEvents
+  private var appOnScreen = false
+  private var micAllowed = false
+  private var voiceTicker: Job? = null
+  /** "End the trip?" asked by voice and still on screen. */
+  private var endTripAsked = false
+  private var voiceWatch: Job? = null
+
+  /** Drivr came on screen / went to the background: the microphone is only used on screen. */
+  fun onAppOnScreen(onScreen: Boolean) {
+    appOnScreen = onScreen
+    if (onScreen && voiceWatch == null) watchVoiceSettings()
+    updateListening()
+  }
+
+  fun onMicPermission(granted: Boolean) {
+    micAllowed = granted
+    if (granted && settingsStore.state.value.voiceCommands) voiceEngine.download()
+    updateListening()
+  }
+
+  fun downloadSpeechModel() {
+    _voiceProblem.value = null
+    voiceEngine.download()
+  }
+
+  fun deleteSpeechModels() {
+    voiceEngine.deleteModels()
+    updateListening()
+  }
+
+  fun speechModelsMb(): Int = voiceEngine.downloadedMb()
+
+  /** Model download finished, or the setting changed: start or stop the microphone. */
+  private fun watchVoiceSettings() {
+    voiceEngine.useLanguage(L10n.locale.language)
+    voiceWatch =
+        viewModelScope.launch {
+          combine(settingsStore.state.map { it.voiceCommands }.distinctUntilChanged(), voiceEngine.state) { on, model -> on to model }
+              .collect { (on, model) ->
+                // Language switched with voice commands on: fetch that language's model too.
+                if (on && micAllowed && model == app.drivr.voice.ModelState.Missing) voiceEngine.download()
+                updateListening()
+              }
+        }
+  }
+
+  private fun updateListening() {
+    val on =
+        settingsStore.state.value.voiceCommands && micAllowed && appOnScreen &&
+            voiceEngine.state.value == app.drivr.voice.ModelState.Ready && _voiceProblem.value != "unsupported"
+    if (on) {
+      voiceEngine.start(
+          assistant.grammar,
+          isSpeaking = AppModule::drivrIsSpeaking,
+          onPartial = { if (assistant.onPartial(it)) app.drivr.voice.Earcon.wake() ; publishVoice() },
+          onResult = { if (assistant.onResult(it)) app.drivr.voice.Earcon.wake(); publishVoice() },
+          onError = { problem ->
+            _voiceProblem.value = problem
+            voiceEngine.stop()
+            assistant.setListening(false)
+            publishVoice()
+          },
+      )
+    } else {
+      voiceEngine.stop()
+    }
+    assistant.setListening(on)
+    publishVoice()
+  }
+
+  /** Tap on the mic chip: talk without the wake phrase. */
+  fun tapVoice() {
+    assistant.tapToTalk()
+    if (assistant.ui is app.drivr.voice.VoiceUi.Awake) app.drivr.voice.Earcon.wake()
+    publishVoice()
+  }
+
+  fun dismissVoice() {
+    assistant.dismiss()
+    publishVoice()
+  }
+
+  /** The end-trip question was answered or closed on screen. */
+  fun onEndTripClosed() {
+    endTripAsked = false
+  }
+
+  private fun publishVoice() {
+    _voice.value = assistant.ui
+    // Cards close by themselves: tick while one is showing.
+    if (assistant.ui is app.drivr.voice.VoiceUi.Waiting || assistant.ui is app.drivr.voice.VoiceUi.Off) return
+    if (voiceTicker?.isActive == true) return
+    voiceTicker =
+        viewModelScope.launch {
+          while (assistant.ui !is app.drivr.voice.VoiceUi.Waiting && assistant.ui !is app.drivr.voice.VoiceUi.Off) {
+            kotlinx.coroutines.delay(500)
+            assistant.expire()
+            _voice.value = assistant.ui
+          }
+        }
+  }
+
+  /** Says [reply] (when the voice is on) and hands it to the card. */
+  private fun answer(text: String, ok: Boolean = true, asks: Boolean = false): app.drivr.voice.VoiceReply {
+    speak(text)
+    return app.drivr.voice.VoiceReply(text, ok, asks)
+  }
+
+  private fun runVoiceCommand(command: app.drivr.voice.VoiceCommand): app.drivr.voice.VoiceReply {
+    val ui = super.navigationUiState.value
+    val driving = ui.isNavigating()
+    val notDriving = { answer(L10n.s(R.string.voice_r_not_driving), ok = false) }
+    return when (command) {
+      app.drivr.voice.VoiceCommand.MUTE -> {
+        updateSettings { it.copy(voice = false) }
+        app.drivr.voice.VoiceReply(L10n.s(R.string.voice_r_muted))
+      }
+      app.drivr.voice.VoiceCommand.UNMUTE -> {
+        updateSettings { it.copy(voice = true) }
+        answer(L10n.s(R.string.voice_r_unmuted))
+      }
+      app.drivr.voice.VoiceCommand.AVOID_TOLLS -> {
+        updateSettings { it.copy(avoidTolls = true) }
+        if (driving && rerouteWithPreferences()) answer(L10n.s(R.string.voice_r_avoid_tolls_reroute))
+        else answer(L10n.s(R.string.voice_r_avoid_tolls))
+      }
+      app.drivr.voice.VoiceCommand.AVOID_MOTORWAYS -> {
+        updateSettings { it.copy(avoidMotorways = true) }
+        if (driving && rerouteWithPreferences()) answer(L10n.s(R.string.voice_r_avoid_motorways_reroute))
+        else answer(L10n.s(R.string.voice_r_avoid_motorways))
+      }
+      app.drivr.voice.VoiceCommand.FASTER_ROUTE -> {
+        val offer = _fasterRoute.value
+        when {
+          !driving -> notDriving()
+          offer != null -> fasterRouteReply(offer)
+          else -> {
+            checkFasterRouteNow()
+            answer(L10n.s(R.string.voice_r_checking_faster))
+          }
+        }
+      }
+      app.drivr.voice.VoiceCommand.GO_HOME ->
+          savedPlaces.value.home?.let {
+            driveTo(it)
+            answer(L10n.s(R.string.voice_r_going_home))
+          } ?: answer(L10n.s(R.string.voice_r_no_home), ok = false)
+      app.drivr.voice.VoiceCommand.GO_WORK ->
+          savedPlaces.value.work?.let {
+            driveTo(it)
+            answer(L10n.s(R.string.voice_r_going_work))
+          } ?: answer(L10n.s(R.string.voice_r_no_work), ok = false)
+      app.drivr.voice.VoiceCommand.FIND_FUEL -> findNearby(PlaceCategory.FUEL)
+      app.drivr.voice.VoiceCommand.FIND_CHARGING -> findNearby(PlaceCategory.CHARGING)
+      app.drivr.voice.VoiceCommand.FIND_PARKING -> findNearby(PlaceCategory.PARKING)
+      app.drivr.voice.VoiceCommand.SHARE_ETA -> {
+        if (!driving) notDriving()
+        else {
+          _voiceEvents.tryEmit(VoiceEvent.ShareEta)
+          app.drivr.voice.VoiceReply(L10n.s(R.string.voice_r_share))
+        }
+      }
+      app.drivr.voice.VoiceCommand.STOP_NAVIGATION -> {
+        if (!driving) notDriving()
+        else {
+          endTripAsked = true
+          _voiceEvents.tryEmit(VoiceEvent.AskEndTrip)
+          answer(L10n.s(R.string.voice_r_end_ask), asks = true)
+        }
+      }
+      app.drivr.voice.VoiceCommand.ETA -> {
+        val progress = ui.progress
+        if (!driving || progress == null) notDriving()
+        else {
+          val total = progress.durationRemaining + trafficAhead.value.sumOf { it.event.delaySeconds ?: 0.0 }
+          val at = java.time.LocalTime.now().plusSeconds(total.toLong()).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+          answer(L10n.s(R.string.voice_r_eta, at, app.drivr.ui.formatDuration(total)))
+        }
+      }
+      app.drivr.voice.VoiceCommand.NEXT_TURN -> {
+        val text = ui.visualInstruction?.primaryContent?.text
+        val dist = ui.progress?.distanceToNextManeuver
+        when {
+          !driving -> notDriving()
+          text.isNullOrBlank() || dist == null -> answer(L10n.s(R.string.voice_r_no_turn), ok = false)
+          else -> answer(L10n.s(R.string.voice_r_next_turn, app.drivr.ui.formatDistance(dist), text))
+        }
+      }
+      app.drivr.voice.VoiceCommand.TRAFFIC_AHEAD -> {
+        if (!driving) notDriving()
+        else {
+          val next = trafficAhead.value.firstOrNull { it.distanceM < LOOK_AHEAD_M }
+          when {
+            next == null -> answer(L10n.s(R.string.voice_r_traffic_none))
+            next.inside -> answer(L10n.s(R.string.voice_r_traffic_inside, app.drivr.ui.formatDistance(next.endM ?: 0.0)))
+            else -> {
+              val delay = next.event.delaySeconds?.takeIf { it >= 60 }?.let { " · " + L10n.s(R.string.delay_plus_min, (it / 60).toInt()) } ?: ""
+              answer(L10n.s(R.string.voice_r_traffic, next.event.kind.label, app.drivr.ui.formatDistance(next.distanceM)) + delay)
+            }
+          }
+        }
+      }
+      app.drivr.voice.VoiceCommand.YES ->
+          when {
+            endTripAsked && driving -> {
+              endTripAsked = false
+              _voiceEvents.tryEmit(VoiceEvent.CloseEndTrip)
+              stopNavigation()
+              answer(L10n.s(R.string.voice_r_trip_ended))
+            }
+            _fasterRoute.value != null -> {
+              switchToFasterRoute()
+              answer(L10n.s(R.string.voice_r_switched))
+            }
+            _routeChoice.value != null -> {
+              confirmRouteChoice()
+              answer(L10n.s(R.string.voice_r_route_chosen))
+            }
+            else -> answer(L10n.s(R.string.voice_r_nothing_to_answer), ok = false)
+          }
+      app.drivr.voice.VoiceCommand.NO ->
+          when {
+            endTripAsked -> {
+              endTripAsked = false
+              _voiceEvents.tryEmit(VoiceEvent.CloseEndTrip)
+              answer(L10n.s(R.string.voice_r_keep_driving))
+            }
+            _fasterRoute.value != null -> {
+              keepCurrentRoute()
+              answer(L10n.s(R.string.voice_r_keep_driving))
+            }
+            else -> answer(L10n.s(R.string.voice_r_nothing_to_answer), ok = false)
+          }
+      // Handled by the assistant itself.
+      app.drivr.voice.VoiceCommand.CANCEL, app.drivr.voice.VoiceCommand.HELP -> app.drivr.voice.VoiceReply("")
+    }
+  }
+
+  private fun fasterRouteReply(offer: FasterRouteState) =
+      answer(L10n.s(R.string.voice_r_faster_found, app.drivr.ui.formatDuration(offer.savesSeconds)), asks = true)
+
+  private fun findNearby(category: PlaceCategory): app.drivr.voice.VoiceReply {
+    closePlanner()
+    openPlaces()
+    searchCategory(category)
+    return answer(L10n.s(R.string.voice_r_searching, category.label.lowercase(L10n.locale)))
+  }
+
+  /** "Avoid tolls" while driving: the same trip again from here, with the new preferences. */
+  private fun rerouteWithPreferences(): Boolean {
+    val dest = destination ?: return false
+    val from = super.navigationUiState.value.location ?: return false
+    val stops = _places.value.stops
+    lastRequest = { navigate(from, dest.coordinate, destinationName, simulate = simulating, stops = stops) }
+    navigate(from, dest.coordinate, destinationName, simulate = simulating, stops = stops)
+    return true
+  }
+
+  /** "Is there a faster route?": look now (not waiting for a jam), and say what came out. */
+  private fun checkFasterRouteNow() {
+    if (fasterRouteJob?.isActive == true) return
+    lastFasterRouteCheckMs = System.currentTimeMillis()
+    fasterRouteJob =
+        viewModelScope.launch(Dispatchers.Default) {
+          lookForFasterRoute()
+          kotlinx.coroutines.withContext(Dispatchers.Main) {
+            val offer = _fasterRoute.value
+            val reply =
+                if (offer != null) fasterRouteReply(offer)
+                else answer(L10n.s(R.string.voice_r_no_faster), ok = false)
+            assistant.show(reply)
+            publishVoice()
+          }
+        }
+  }
+
+  override fun onCleared() {
+    super.onCleared()
+    voiceEngine.stop()
   }
 
   companion object {

@@ -18,6 +18,11 @@ data class Settings(
     /** Open AR by itself ~300 m before each turn. Off by default. */
     val arAuto: Boolean = false,
     val voice: Boolean = true,
+    /**
+     * "Hey Drivr" voice commands. Off by default: needs the microphone and a speech model download
+     * (~40 MB). Listens only while Drivr is on screen; recognition runs on the phone.
+     */
+    val voiceCommands: Boolean = false,
     val speedCameras: Boolean = true,
     val trafficOnMap: Boolean = true,
     val trafficAlerts: Boolean = true,
@@ -54,6 +59,7 @@ class SettingsStore(context: Context) {
         .putBoolean("arEnabled", next.arEnabled)
         .putBoolean("arAuto", next.arAuto)
         .putBoolean("voice", next.voice)
+        .putBoolean("voiceCommands", next.voiceCommands)
         .putBoolean("speedCameras", next.speedCameras)
         .putBoolean("trafficOnMap", next.trafficOnMap)
         .putBoolean("trafficAlerts", next.trafficAlerts)
@@ -79,6 +85,7 @@ class SettingsStore(context: Context) {
             arEnabled = prefs.getBoolean("arEnabled", d.arEnabled),
             arAuto = prefs.getBoolean("arAuto", d.arAuto),
             voice = prefs.getBoolean("voice", d.voice),
+            voiceCommands = prefs.getBoolean("voiceCommands", d.voiceCommands),
             speedCameras = prefs.getBoolean("speedCameras", d.speedCameras),
             trafficOnMap = prefs.getBoolean("trafficOnMap", d.trafficOnMap),
             trafficAlerts = prefs.getBoolean("trafficAlerts", d.trafficAlerts),
