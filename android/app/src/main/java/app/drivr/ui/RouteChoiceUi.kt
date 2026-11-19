@@ -99,6 +99,10 @@ fun RouteChoiceCard(
     onSelect: (Int) -> Unit,
     onGo: () -> Unit,
     modifier: Modifier = Modifier,
+    /** "Go" at the start of a trip; "Start" or "Preview drive" in the planner. */
+    goLabel: String = stringResource(R.string.route_choice_go),
+    /** A line above the button (e.g. why it is a preview), instead of "Times include live traffic". */
+    note: String? = null,
 ) {
   val fastest = options.minOf { it.totalSeconds }
   val fastestIndex = options.indexOfFirst { it.totalSeconds == fastest }
@@ -156,9 +160,10 @@ fun RouteChoiceCard(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 10.dp, top = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-      Text(stringResource(R.string.route_choice_live), color = Drivr.textMuted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+      Text(note ?: stringResource(R.string.route_choice_live), color = if (note != null) Drivr.hint else Drivr.textMuted,
+          fontSize = 11.sp, lineHeight = 14.sp, modifier = Modifier.weight(1f).padding(end = 8.dp))
       Text(
-          stringResource(R.string.route_choice_go),
+          goLabel,
           color = Color.White,
           fontWeight = FontWeight.SemiBold,
           fontSize = 15.sp,

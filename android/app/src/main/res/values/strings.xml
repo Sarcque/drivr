@@ -129,8 +129,6 @@
     <string name="menu_music">Music</string>
     <string name="menu_settings">Settings</string>
     <string name="menu_end">End trip</string>
-    <string name="browse_long_press">Long-press the map to go there</string>
-    <string name="browse_or_simulate">or try a simulated drive</string>
     <string name="osm_credit">© OpenStreetMap contributors</string>
     <string name="browse_test_drive">Test drive</string>
     <string name="action_retry">Retry</string>
@@ -245,4 +243,45 @@
     <string name="action_cancel">Cancel</string>
     <string name="route_controls_on">Reported checks on this route: %1$d</string>
     <string name="route_controls_avoided">Avoids reported checks: %1$d</string>
+
+    <!-- Route planner, saved places, driving basics -->
+    <string name="plan_route">Route</string>
+    <string name="plan_start">Start</string>
+    <string name="plan_preview_drive">Preview drive</string>
+    <string name="plan_preview_note">You\'re not at the start, so this plays the drive as a simulation</string>
+    <string name="plan_your_location">Your location</string>
+    <string name="plan_choose_start">Choose a starting point</string>
+    <string name="plan_choose_on_map">Choose on map</string>
+    <string name="plan_pick_on_map">Long-press the map to set the destination</string>
+    <string name="plan_pick_start_on_map">Long-press the map to set the start</string>
+    <string name="plan_dropped_pin">Dropped pin</string>
+    <string name="plan_swap">Swap start and destination</string>
+    <string name="plan_home">Home</string>
+    <string name="plan_work">Work</string>
+    <string name="plan_set_home">Set home</string>
+    <string name="plan_set_work">Set work</string>
+    <string name="plan_nothing_found">Nothing found</string>
+    <string name="map_mute">Mute the voice</string>
+    <string name="map_unmute">Turn the voice on</string>
+    <string name="menu_share_eta">Share arrival time</string>
+    <string name="share_eta_to">On my way to %1$s, arriving around %2$s (%3$s).</string>
+    <string name="share_eta">On my way, arriving around %1$s (%2$s).</string>
+    <string name="end_trip_title">End this trip?</string>
+    <string name="end_trip_body">Guidance to %1$s stops.</string>
+    <string name="end_trip_keep">Keep driving</string>
+    <string name="settings_route">Route</string>
+    <string name="settings_avoid_tolls">Avoid tolls</string>
+    <string name="settings_avoid_tolls_sub">Toll roads, bridges and tunnels, when there is another way</string>
+    <string name="settings_avoid_motorways">Avoid motorways</string>
+    <string name="settings_avoid_motorways_sub">Takes longer; only uses them when there is no other way</string>
+    <string name="settings_avoid_ferries">Avoid ferries</string>
+    <string name="settings_avoid_ferries_sub">Unless a ferry is the only way there</string>
+    <string name="settings_saved_places">Saved places</string>
+    <string name="settings_clear_recents">Clear recent destinations</string>
+    <string name="settings_not_set">Not set</string>
+    <string name="settings_set">Set</string>
+    <string name="settings_forget">Forget</string>
+    <string name="settings_developer">Developer</string>
+    <string name="settings_test_drive">Test drive button</string>
+    <string name="settings_test_drive_sub">Shows a simulated drive from Utrecht to Amersfoort on the start screen</string>
 </resources>

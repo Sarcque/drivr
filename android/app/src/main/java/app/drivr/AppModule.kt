@@ -63,8 +63,12 @@ object AppModule {
     // OSRM-format output with banner instructions, which carry the per-lane indications).
     // Turn instructions and the spoken prompts come back in the app language.
     val options = mapOf("units" to "kilometers", "language" to app.drivr.i18n.L10n.valhallaLanguage())
+    settings.state // loads the avoid settings into RoutePreferences before the first request
     FerrostarCore(
-        provider.withJsonOptions(options),
+        // Wrapped so every request, reroutes included, carries the avoid settings (tolls, ferries…).
+        routeProvider =
+            com.stadiamaps.ferrostar.core.RouteProvider.RouteAdapter(
+                PreferencesRouteAdapter(uniffi.ferrostar.RouteAdapter.fromWellKnownRouteProvider(provider.withJsonOptions(options)))),
         httpClient = httpClient,
         locationProvider = locationProvider,
         foregroundServiceManager =
@@ -138,6 +142,9 @@ object AppModule {
         FuelPriceRepository(listOf(FranceFuelPrices(http))),
     )
   }
+
+  /** Home, work and recent destinations (on the phone only). */
+  val savedPlaces: app.drivr.places.SavedPlacesStore by lazy { app.drivr.places.SavedPlacesStore(appContext) }
 
   val settings: app.drivr.settings.SettingsStore by lazy { app.drivr.settings.SettingsStore(appContext) }
 

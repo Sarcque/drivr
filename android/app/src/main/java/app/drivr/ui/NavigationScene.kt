@@ -154,6 +154,13 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   androidx.activity.compose.BackHandler(enabled = places.open || places.selected != null) {
     if (places.selected != null) viewModel.selectPlace(null) else viewModel.closePlaces()
   }
+  val plan by viewModel.plan.collectAsState()
+  val saved by viewModel.savedPlaces.collectAsState()
+  androidx.activity.compose.BackHandler(enabled = plan.open) {
+    if (plan.editing != null || plan.pickingOnMap != null) viewModel.cancelPlanEdit() else viewModel.closePlanner()
+  }
+  // Ending a trip asks first (from the menu or a tap on the arrival card).
+  var confirmEnd by rememberSaveable { mutableStateOf(false) }
 
   val settings by viewModel.settings.collectAsState()
   var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -202,6 +209,14 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
   val inOverview = mapState.cameraMode == NavigationCameraMode.OVERVIEW
 
+  fun showPlanOverview() {
+    val box = plan.options.flatMap { it.route.geometry }.boundingBox() ?: return
+    mapState.showRouteOverview(
+        box,
+        PaddingValues(start = sidePanelW + 40.dp, end = 80.dp, top = topCardsH + 40.dp, bottom = bottomCardsH + 40.dp),
+    )
+  }
+
   fun showOverview() {
     val route = uiState.routeGeometry ?: return
     // With routes to choose from, fit all of them.
@@ -223,6 +238,14 @@ fun NavigationScene(viewModel: DrivrViewModel) {
     androidx.compose.runtime.snapshotFlow { mapState.cameraState.position }.collectLatest {
       kotlinx.coroutines.delay(10_000)
       mapState.recenter(isNavigating = true)
+    }
+  }
+
+  // Planner routes found: fit them between the fields and the route list.
+  LaunchedEffect(viewModel) {
+    viewModel.planRoutesReady.collect {
+      kotlinx.coroutines.delay(300)
+      showPlanOverview()
     }
   }
 
@@ -258,10 +281,20 @@ fun NavigationScene(viewModel: DrivrViewModel) {
             else drivingCameraOptions(screenH, bottomCards = bottomCardsH, topCards = topCardsH),
         showDefaultPuck = false,
         onMapLongClick = { position, _ ->
-          if (!uiState.isNavigating()) viewModel.navigateTo(position)
+          // Plans a route to the point (or sets the start/destination being picked); never starts
+          // driving by itself.
+          if (!uiState.isNavigating()) viewModel.onMapLongPress(position)
           NavigationMapClickResult.Consume
         },
         content = { state ->
+          if (!navigating) {
+            val opts = plan.options
+            PlanRoutesLayer(
+                selected = opts.getOrNull(plan.selected)?.route?.geometry,
+                others = opts.filterIndexed { i, _ -> i != plan.selected }.map { it.route.geometry },
+            )
+            PlanPinsLayer(from = (plan.from as? app.drivr.RouteStart.At)?.place, to = plan.to?.takeIf { plan.open })
+          }
           if (settings.trafficOnMap) TrafficLayers(trafficEvents)
           if (settings.speedCameras) CamerasLayer(cameraList)
           PlacesLayer(
@@ -348,7 +381,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
               distanceRemainingM = progress.distanceRemaining,
               durationRemainingS = progress.durationRemaining + delayS,
               trafficDelayS = delayS,
-              onEnd = viewModel::stopNavigation,
+              onEnd = { confirmEnd = true },
           )
         }
       }
@@ -362,6 +395,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
             exactDetourS = places.exactDetourS,
             onAddStop = { viewModel.addStop(selected.place) },
             onDrive = { viewModel.driveTo(selected.place) },
+            onRoute = { viewModel.openPlanner(to = selected.place) },
             onBack = { viewModel.selectPlace(null) },
             priceCountry = places.priceCountry,
             modifier = m,
@@ -384,17 +418,30 @@ fun NavigationScene(viewModel: DrivrViewModel) {
         if (navigating) add(MapAction(stringResource(R.string.map_search_route), MapIcon.Search, viewModel::openPlaces))
         if (!mapState.isTrackingUser) add(MapAction(stringResource(R.string.map_follow), MapIcon.Recenter) { mapState.recenter(navigating) })
         else if (navigating) add(MapAction(stringResource(R.string.map_overview), MapIcon.Overview, ::showOverview))
+        // Voice on/off in one tap while driving (same switch as Settings › Voice guidance).
+        if (navigating) {
+          add(
+              if (settings.voice) MapAction(stringResource(R.string.map_mute), MapIcon.Sound, viewModel::toggleMute)
+              else MapAction(stringResource(R.string.map_unmute), MapIcon.Muted, viewModel::toggleMute))
+        }
       }
+      val shareLabel = stringResource(R.string.menu_share_eta)
       val menu = buildList<Pair<String, () -> Unit>> {
         if (navigating) {
           add(stringResource(R.string.menu_turns) to { showTurns = true })
+          add(shareLabel to {
+            viewModel.shareEtaText()?.let { text ->
+              val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, text)
+              context.startActivity(android.content.Intent.createChooser(send, shareLabel))
+            }
+          })
           if (settings.arEnabled) add(stringResource(R.string.menu_ar) to { arManual = true })
           if (settings.musicWhileDriving) add(stringResource(R.string.menu_music) to { showMusic = !showMusic })
           add(stringResource(R.string.menu_settings) to { showSettings = true })
-          add(stringResource(R.string.menu_end) to viewModel::stopNavigation)
+          add(stringResource(R.string.menu_end) to { confirmEnd = true })
         }
       }
-      if (!places.open) MapButtonColumn(primary, menu, m)
+      if (!places.open && !(plan.open && plan.editing != null)) MapButtonColumn(primary, menu, m)
     }
     val safe = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(12.dp)
     if (navigating && landscape) {
@@ -424,6 +471,38 @@ fun NavigationScene(viewModel: DrivrViewModel) {
           onTopHeight = { topCardsH = it },
           onBottomHeight = { bottomCardsH = it },
       )
+    } else if (plan.open) {
+      // Route planner: from / to at the top, suggestions or the routes at the bottom.
+      StackedOverlay(
+          safe,
+          top = {
+            val editing = plan.editing
+            val picking = plan.pickingOnMap
+            when {
+              picking != null -> MapPickHint(picking, onCancel = viewModel::cancelPlanEdit)
+              editing != null -> PlanSearchField(editing, plan.query, viewModel::planSearch, onBack = viewModel::cancelPlanEdit)
+              else -> PlanFieldsCard(plan, viewModel::editPlanField, viewModel::swapPlan, viewModel::closePlanner)
+            }
+            status(Modifier)
+          },
+          buttons = buttons,
+          bottom = {
+            val editing = plan.editing
+            if (editing != null) {
+              PlanSuggestions(
+                  plan, saved,
+                  onHere = viewModel::choosePlanHere,
+                  onPickOnMap = { viewModel.pickPlanOnMap(editing) },
+                  onPlace = viewModel::choosePlanPlace,
+                  maxListHeight = if (landscape) 150.dp else 420.dp,
+              )
+            } else if (plan.pickingOnMap == null) {
+              PlanRoutesCard(plan, viewModel::selectPlanRoute, viewModel::startPlannedTrip)
+            }
+          },
+          onTopHeight = { topCardsH = it },
+          onBottomHeight = { bottomCardsH = it },
+      )
     } else {
       StackedOverlay(
           safe,
@@ -444,7 +523,16 @@ fun NavigationScene(viewModel: DrivrViewModel) {
           buttons = buttons,
           bottom = {
             if (places.open) placesPanel(Modifier)
-            else StartPanel(status = routeStatus, onDemoDrive = viewModel::startDemoDrive, modifier = Modifier)
+            else
+                QuickPanel(
+                    saved,
+                    onPlan = { viewModel.openPlanner() },
+                    onPlace = { viewModel.openPlanner(to = it) },
+                    onSetHome = { viewModel.editSavedPlace(app.drivr.PlanField.HOME) },
+                    onSetWork = { viewModel.editSavedPlace(app.drivr.PlanField.WORK) },
+                    loading = routeStatus is RouteStatus.Loading,
+                    onTestDrive = if (settings.showTestDrive) viewModel::startDemoDrive else null,
+                )
           },
           onTopHeight = { topCardsH = it },
           onBottomHeight = { bottomCardsH = it },
@@ -472,6 +560,23 @@ fun NavigationScene(viewModel: DrivrViewModel) {
           onMusicAccess = { context.startActivity(music.accessSettingsIntent()) },
           language = remember { app.drivr.i18n.AppLanguage.chosen(context) },
           onLanguage = { tag -> context.findActivity()?.let { app.drivr.i18n.AppLanguage.set(it, tag) } },
+          saved = saved,
+          onEditSaved = { field ->
+            showSettings = false
+            viewModel.editSavedPlace(field)
+          },
+          onClearSaved = viewModel::clearSavedPlace,
+          onClearRecents = viewModel::clearRecents,
+      )
+    }
+    if (confirmEnd && navigating) {
+      ConfirmEndTrip(
+          destination = viewModel.destinationLabel,
+          onKeep = { confirmEnd = false },
+          onEnd = {
+            confirmEnd = false
+            viewModel.stopNavigation()
+          },
       )
     }
   }
@@ -493,37 +598,6 @@ private fun NavigationUiState.speedLimitKmh(): Int? {
     MeasurementSpeedUnit.KilometersPerHour -> limit.value.roundToInt()
     MeasurementSpeedUnit.MilesPerHour -> (limit.value * 1.609344).roundToInt()
     else -> null
-  }
-}
-
-/** Browsing: one compact card. Search sits at the top; this only offers the test drive. */
-@Composable
-internal fun StartPanel(status: RouteStatus, onDemoDrive: () -> Unit, modifier: Modifier) {
-  Row(
-      modifier =
-          modifier
-              .fillMaxWidth()
-              .clip(RoundedCornerShape(20.dp))
-              .background(Drivr.card)
-              .padding(start = 18.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
-      verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Column(Modifier.weight(1f)) {
-      when (status) {
-        else -> {
-          Text(stringResource(R.string.browse_long_press), color = Drivr.text, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-          Text(stringResource(R.string.browse_or_simulate), color = Drivr.textMuted, fontSize = 13.sp)
-          Text(stringResource(R.string.osm_credit), color = Drivr.textMuted, fontSize = 10.sp)
-        }
-      }
-    }
-    if (status is RouteStatus.Loading) {
-      CircularProgressIndicator(Modifier.padding(horizontal = 16.dp).size(22.dp), color = Color.White, strokeWidth = 2.dp)
-    } else {
-      Button(onClick = onDemoDrive, colors = ButtonDefaults.buttonColors(containerColor = Drivr.accent)) {
-        Text(stringResource(R.string.browse_test_drive))
-      }
-    }
   }
 }
 

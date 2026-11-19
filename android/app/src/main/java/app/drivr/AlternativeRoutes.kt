@@ -30,13 +30,16 @@ import uniffi.ferrostar.Waypoint
  */
 class AlternativeRoutesClient(
     private val http: OkHttpClient,
-    private val adapter: RouteAdapter,
+    private val adapter: uniffi.ferrostar.RouteAdapterInterface,
 ) {
   /**
    * [avoid]: Valhalla `exclude_polygons` (e.g. border checkpoints, see [BorderChecks.avoidPolygons]);
    * with it only the one best route around them is asked for.
    */
   suspend fun routes(from: UserLocation, waypoints: List<Waypoint>, avoid: JSONArray? = null): List<Route> =
+      routes(from, waypoints, avoid, PreferencesRouteAdapter(adapter))
+
+  private suspend fun routes(from: UserLocation, waypoints: List<Waypoint>, avoid: JSONArray?, adapter: PreferencesRouteAdapter): List<Route> =
       withContext(Dispatchers.IO) {
         val request =
             when (val r = adapter.generateRequest(from, waypoints)) {
@@ -117,4 +120,21 @@ fun rankRoutes(routes: List<Route>, events: List<TrafficEvent>, border: BorderCo
   return RouteChoice.distinct(scored.sortedBy { it.score.totalSeconds }, { it.geometry }) { a, b ->
     a.score.border?.crossing?.id == b.score.border?.crossing?.id
   }
+}
+
+/**
+ * Wraps Valhalla's request builder so every request (also Ferrostar's own reroutes) carries the
+ * driver's avoid settings (tolls, motorways, ferries) as they are at that moment.
+ */
+class PreferencesRouteAdapter(private val inner: uniffi.ferrostar.RouteAdapterInterface) : uniffi.ferrostar.RouteAdapterInterface {
+  override fun generateRequest(userLocation: UserLocation, waypoints: List<Waypoint>): RouteRequest =
+      when (val r = inner.generateRequest(userLocation, waypoints)) {
+        is RouteRequest.HttpPost ->
+            RouteRequest.HttpPost(
+                r.url, r.headers,
+                app.drivr.settings.RoutePreferences.applyTo(JSONObject(String(r.body))).toString().toByteArray())
+        else -> r
+      }
+
+  override fun parseResponse(response: ByteArray): List<Route> = inner.parseResponse(response)
 }

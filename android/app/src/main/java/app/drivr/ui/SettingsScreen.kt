@@ -55,10 +55,15 @@ fun SettingsScreen(
     onLanguage: (String) -> Unit = {},
     /** Open with the "no guarantee" popup showing (screenshots). */
     showChecksDisclaimer: Boolean = false,
+    saved: app.drivr.places.SavedPlaces = app.drivr.places.SavedPlaces(),
+    /** Change home or work (opens the place search). */
+    onEditSaved: (app.drivr.PlanField) -> Unit = {},
+    onClearSaved: (app.drivr.PlanField) -> Unit = {},
+    onClearRecents: () -> Unit = {},
 ) {
   var disclaimer by remember { mutableStateOf(showChecksDisclaimer) }
   Box(modifier.fillMaxSize()) {
-  SettingsContent(settings, onChange, onClose, musicAccess, onMusicAccess, language, onLanguage) { disclaimer = true }
+  SettingsContent(settings, onChange, onClose, musicAccess, onMusicAccess, language, onLanguage, saved, onEditSaved, onClearSaved, onClearRecents) { disclaimer = true }
   if (disclaimer) {
     ChecksDisclaimer(
         onCancel = { disclaimer = false },
@@ -119,6 +124,10 @@ private fun SettingsContent(
     onMusicAccess: () -> Unit,
     language: String,
     onLanguage: (String) -> Unit,
+    saved: app.drivr.places.SavedPlaces,
+    onEditSaved: (app.drivr.PlanField) -> Unit,
+    onClearSaved: (app.drivr.PlanField) -> Unit,
+    onClearRecents: () -> Unit,
     askDisclaimer: () -> Unit,
 ) {
   Column(Modifier.fillMaxSize().background(Color(0xFF0E1013)).statusBarsPadding().navigationBarsPadding()) {
@@ -133,6 +142,18 @@ private fun SettingsContent(
         Toggle(stringResource(R.string.settings_voice), stringResource(R.string.settings_voice_sub), settings.voice) { v -> onChange { it.copy(voice = v) } }
         Toggle(stringResource(R.string.settings_ar), stringResource(R.string.settings_ar_sub), settings.arEnabled) { v -> onChange { it.copy(arEnabled = v) } }
         Toggle(stringResource(R.string.settings_ar_auto), stringResource(R.string.settings_ar_auto_sub), settings.arAuto, enabled = settings.arEnabled) { v -> onChange { it.copy(arAuto = v) } }
+      }
+      Section(stringResource(R.string.settings_route)) {
+        Toggle(stringResource(R.string.settings_avoid_tolls), stringResource(R.string.settings_avoid_tolls_sub), settings.avoidTolls) { v -> onChange { it.copy(avoidTolls = v) } }
+        Toggle(stringResource(R.string.settings_avoid_motorways), stringResource(R.string.settings_avoid_motorways_sub), settings.avoidMotorways) { v -> onChange { it.copy(avoidMotorways = v) } }
+        Toggle(stringResource(R.string.settings_avoid_ferries), stringResource(R.string.settings_avoid_ferries_sub), settings.avoidFerries) { v -> onChange { it.copy(avoidFerries = v) } }
+      }
+      Section(stringResource(R.string.settings_saved_places)) {
+        SavedRow(stringResource(R.string.plan_home), saved.home, { onEditSaved(app.drivr.PlanField.HOME) }, { onClearSaved(app.drivr.PlanField.HOME) })
+        SavedRow(stringResource(R.string.plan_work), saved.work, { onEditSaved(app.drivr.PlanField.WORK) }, { onClearSaved(app.drivr.PlanField.WORK) })
+        Row(Modifier.fillMaxWidth().clickable(enabled = saved.recent.isNotEmpty(), onClick = onClearRecents).padding(horizontal = 16.dp, vertical = 14.dp)) {
+          Text(stringResource(R.string.settings_clear_recents), color = if (saved.recent.isNotEmpty()) Drivr.accent else Drivr.inactive, fontSize = 16.sp)
+        }
       }
       Section(stringResource(R.string.settings_checks)) {
         Toggle(stringResource(R.string.settings_border_checks), stringResource(R.string.settings_border_checks_sub), settings.borderChecks) { v -> onChange { it.copy(borderChecks = v) } }
@@ -173,6 +194,9 @@ private fun SettingsContent(
           }
         }
       }
+      Section(stringResource(R.string.settings_developer)) {
+        Toggle(stringResource(R.string.settings_test_drive), stringResource(R.string.settings_test_drive_sub), settings.showTestDrive) { v -> onChange { it.copy(showTestDrive = v) } }
+      }
       Text(
           stringResource(R.string.settings_credits),
           color = Drivr.inactive, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp))
@@ -204,6 +228,25 @@ private fun LanguagePicker(language: String, onLanguage: (String) -> Unit) {
             },
         )
       }
+    }
+  }
+}
+
+/** Home or work: where it is, tap to change, ✕ to forget it. */
+@Composable
+private fun SavedRow(title: String, place: app.drivr.places.Place?, onEdit: () -> Unit, onClear: () -> Unit) {
+  Row(Modifier.fillMaxWidth().clickable(onClick = onEdit).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+      Text(title, color = Drivr.text, fontSize = 16.sp)
+      Text(
+          place?.let { listOfNotNull(it.name, it.address).distinct().joinToString(", ") } ?: stringResource(R.string.settings_not_set),
+          color = Drivr.textMuted, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+    }
+    if (place != null) {
+      Text("✕", color = Drivr.textMuted, fontSize = 16.sp,
+          modifier = Modifier.clip(CircleShape).clickable(onClickLabel = stringResource(R.string.settings_forget), onClick = onClear).padding(12.dp))
+    } else {
+      Text(stringResource(R.string.settings_set), color = Drivr.accent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(12.dp))
     }
   }
 }

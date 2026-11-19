@@ -83,7 +83,7 @@ class PlacesScreenshotTest {
           Spacer(Modifier.height(10.dp))
           CategoryChips(null, {})
         }
-        StartPanel(RouteStatus.Idle, {}, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
+        QuickPanel(app.drivr.places.SavedPlaces(), {}, {}, {}, {}, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
       }
     }
   }

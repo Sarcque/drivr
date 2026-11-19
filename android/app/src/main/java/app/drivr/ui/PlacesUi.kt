@@ -437,6 +437,8 @@ fun PlaceDetailCard(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     priceCountry: String? = null,
+    /** Not driving: open the route planner to this place (routes first, or start from elsewhere). */
+    onRoute: (() -> Unit)? = null,
 ) {
   val p = result.place
   Column(
@@ -488,6 +490,9 @@ fun PlaceDetailCard(
       if (navigating) {
         BigButton(stringResource(R.string.places_add_stop), primary = true, onClick = onAddStop, modifier = Modifier.weight(1f))
         BigButton(stringResource(R.string.places_go_here), primary = false, onClick = onDrive, modifier = Modifier.weight(0.7f))
+      } else if (onRoute != null) {
+        BigButton(stringResource(R.string.plan_route), primary = true, onClick = onRoute, modifier = Modifier.weight(1f))
+        BigButton(stringResource(R.string.plan_start), primary = false, onClick = onDrive, modifier = Modifier.weight(0.8f))
       } else {
         BigButton(stringResource(R.string.places_drive_here), primary = true, onClick = onDrive, modifier = Modifier.weight(1f))
       }

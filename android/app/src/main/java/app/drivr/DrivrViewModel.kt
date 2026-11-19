@@ -98,6 +98,40 @@ data class PlacesState(
     val stops: List<Place> = emptyList(),
 )
 
+/** Where a planned route starts: the phone's own location, or a place the driver picked. */
+sealed interface RouteStart {
+  data object Here : RouteStart
+
+  data class At(val place: Place) : RouteStart
+}
+
+/** A field of the route planner, or a saved place being set. */
+enum class PlanField { FROM, TO, HOME, WORK }
+
+/**
+ * The route planner: from (your location or any address), to, and the routes between them, shown
+ * on the map before anything starts. From another address the trip can't be driven for real, so
+ * it plays as a simulated preview drive instead.
+ */
+data class PlanState(
+    val open: Boolean = false,
+    val from: RouteStart = RouteStart.Here,
+    val to: Place? = null,
+    /** The field being typed into (the suggestion list shows), or null. */
+    val editing: PlanField? = null,
+    val query: String = "",
+    val results: List<PlaceResult> = emptyList(),
+    val searching: Boolean = false,
+    val searchError: String? = null,
+    /** Waiting for a long-press on the map to set this field. */
+    val pickingOnMap: PlanField? = null,
+    /** Routes from [from] to [to], quickest (with live traffic) first. */
+    val options: List<RouteOption> = emptyList(),
+    val selected: Int = 0,
+) {
+  val fromHere: Boolean get() = from == RouteStart.Here
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class DrivrViewModel(
     private val core: FerrostarCore = AppModule.ferrostarCore,
@@ -108,6 +142,7 @@ class DrivrViewModel(
     private val settingsStore: app.drivr.settings.SettingsStore = AppModule.settings,
     private val alternatives: AlternativeRoutesClient = AppModule.alternativeRoutes,
     private val borderReports: app.drivr.traffic.BorderReportsClient = AppModule.borderReports,
+    private val savedStore: app.drivr.places.SavedPlacesStore = AppModule.savedPlaces,
 ) : DefaultNavigationViewModel(core, valhallaExtendedOSRMAnnotationPublisher()) {
 
   private val hasLocationPermission = MutableStateFlow(false)
@@ -229,6 +264,8 @@ class DrivrViewModel(
   /** The trip's final destination, so stops can be inserted before it. */
   private var destination: Waypoint? = null
   private var destinationName: String? = null
+  /** The destination's name for the current trip, if it has one. */
+  val destinationLabel: String? get() = destinationName
   private var simulating = false
 
   init {
@@ -279,8 +316,6 @@ class DrivrViewModel(
     )
   }
 
-  /** Real navigation from the current location. */
-  fun navigateTo(destination: GeographicCoordinate) = routeFromHere(destination, name = null)
 
   /**
    * Routes from where the phone really is. Waits (up to 20 s) for the first GPS fix instead of
@@ -338,20 +373,7 @@ class DrivrViewModel(
         // Valhalla's times have no live traffic: rank with the NDW jams on each route. Going into
         // Germany over a checkpoint, also ask for a way around it and for live check reports.
         val ranked = withBorderChecks(from, waypoints, routes)
-        val route = ranked.first().route
-        Log.i(TAG, "Route: ${route.geometry.size} points, ${route.distance.toInt()} m, ${ranked.size} option(s)")
-        clearFasterRoute()
-        if (simulate) locationProvider.enableSimulationOn(route)
-        else locationProvider.disableSimulation()
-        core.startNavigation(route = route)
-        applyVoice()
-        destination = dest
-        destinationName = name
-        simulating = simulate
-        _places.value = _places.value.copy(stops = stops)
-        _routeStatus.value = RouteStatus.Idle
-        showRouteChoice(ranked)
-        _routeStarted.tryEmit(Unit)
+        beginTrip(ranked, dest, name, simulate, stops)
       } catch (e: kotlinx.coroutines.CancellationException) {
         throw e
       } catch (e: Exception) {
@@ -359,6 +381,24 @@ class DrivrViewModel(
         _routeStatus.value = RouteStatus.Failed(routingError(e))
       }
     }
+  }
+
+  /** Starts driving the first of [ranked]; the others are offered in the route choice card. */
+  private fun beginTrip(ranked: List<RouteOption>, dest: Waypoint, name: String?, simulate: Boolean, stops: List<Place>) {
+    val route = ranked.first().route
+    Log.i(TAG, "Route: ${route.geometry.size} points, ${route.distance.toInt()} m, ${ranked.size} option(s)")
+    clearFasterRoute()
+    if (simulate) locationProvider.enableSimulationOn(route)
+    else locationProvider.disableSimulation()
+    core.startNavigation(route = route)
+    applyVoice()
+    destination = dest
+    destinationName = name
+    simulating = simulate
+    _places.value = _places.value.copy(stops = stops)
+    _routeStatus.value = RouteStatus.Idle
+    showRouteChoice(ranked)
+    _routeStarted.tryEmit(Unit)
   }
 
   // ---- Route choice: alternatives at the start, and a faster way around jams while driving -----
@@ -682,6 +722,8 @@ class DrivrViewModel(
 
   /** Drive straight to a place (replaces the current trip). */
   fun driveTo(place: Place) {
+    rememberRecent(place)
+    closePlanner()
     val navigatingFrom = super.navigationUiState.value.location
     closePlaces()
     val to = GeographicCoordinate(place.lat, place.lon)
@@ -706,11 +748,267 @@ class DrivrViewModel(
   private fun Place.waypoint() =
       Waypoint(coordinate = GeographicCoordinate(lat, lon), kind = WaypointKind.BREAK)
 
+  // ---- Route planner: from anywhere to anywhere, saved places and recents ------------------------
+
+  val savedPlaces: StateFlow<app.drivr.places.SavedPlaces> = savedStore.state
+
+  private val _plan = MutableStateFlow(PlanState())
+  val plan = _plan.asStateFlow()
+  private var planJob: Job? = null
+  private var planSearchJob: Job? = null
+
+  /** Fires when the planner has routes, so the map can fit them. */
+  private val _planRoutesReady = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+  val planRoutesReady: kotlinx.coroutines.flow.SharedFlow<Unit> = _planRoutesReady
+
+  /** Opens the planner, from your location unless [from] says otherwise. Without [to] it asks where to. */
+  fun openPlanner(to: Place? = null, from: RouteStart = RouteStart.Here) {
+    closePlaces()
+    _plan.value = PlanState(open = true, from = from, to = to, editing = if (to == null) PlanField.TO else null)
+    if (to != null) planRoutes()
+  }
+
+  /** Set home or work: the planner's search list, for that one field. */
+  fun editSavedPlace(field: PlanField) {
+    closePlaces()
+    val p = _plan.value
+    _plan.value = if (p.open) p.copy(editing = field, query = "", results = emptyList()) else PlanState(open = true, editing = field)
+  }
+
+  fun closePlanner() {
+    planJob?.cancel()
+    planSearchJob?.cancel()
+    if (_plan.value.open && _routeStatus.value is RouteStatus.Loading) _routeStatus.value = RouteStatus.Idle
+    _plan.value = PlanState()
+  }
+
+  fun editPlanField(field: PlanField) {
+    _plan.value = _plan.value.copy(editing = field, query = "", results = emptyList(), searchError = null, pickingOnMap = null)
+  }
+
+  /** Back from the suggestion list. Closes the planner when there is nothing to show behind it. */
+  fun cancelPlanEdit() {
+    planSearchJob?.cancel()
+    val p = _plan.value
+    // Nothing behind the list (opened to pick a destination or to set home): close it all.
+    if (p.to == null) return closePlanner()
+    _plan.value = p.copy(editing = null, query = "", results = emptyList(), pickingOnMap = null)
+  }
+
+  fun planSearch(query: String) {
+    _plan.value = _plan.value.copy(query = query, searchError = null)
+    planSearchJob?.cancel()
+    if (query.isBlank()) {
+      _plan.value = _plan.value.copy(results = emptyList(), searching = false)
+      return
+    }
+    val here = here() ?: return
+    _plan.value = _plan.value.copy(searching = true)
+    planSearchJob =
+        viewModelScope.launch {
+          kotlinx.coroutines.delay(350)
+          try {
+            val results = placesRepo.search(query.trim(), here, null)
+            _plan.value = _plan.value.copy(searching = false, results = results)
+          } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+          } catch (e: Exception) {
+            Log.w(TAG, "Planner search failed", e)
+            _plan.value = _plan.value.copy(searching = false, searchError = placesError(e))
+          }
+        }
+  }
+
+  /** A suggestion was picked for the field being edited. */
+  fun choosePlanPlace(place: Place) {
+    val p = _plan.value
+    when (val field = p.editing ?: p.pickingOnMap ?: return) {
+      PlanField.HOME, PlanField.WORK -> {
+        savedStore.update { if (field == PlanField.HOME) it.copy(home = place) else it.copy(work = place) }
+        // Opened only to set home/work: done. Otherwise back to the route.
+        if (p.to == null && p.from == RouteStart.Here) closePlanner()
+        else _plan.value = p.copy(editing = null, pickingOnMap = null, query = "", results = emptyList())
+      }
+      PlanField.FROM -> setPlan(p.copy(from = RouteStart.At(place)))
+      PlanField.TO -> setPlan(p.copy(to = place))
+    }
+  }
+
+  /** "Your location" picked as the start. */
+  fun choosePlanHere() {
+    val p = _plan.value
+    setPlan(p.copy(from = RouteStart.Here))
+  }
+
+  private fun setPlan(next: PlanState) {
+    _plan.value = next.copy(editing = null, pickingOnMap = null, query = "", results = emptyList(), options = emptyList(), selected = 0)
+    if (next.to != null) planRoutes()
+  }
+
+  /** The next long-press on the map sets [field]. */
+  fun pickPlanOnMap(field: PlanField) {
+    _plan.value = _plan.value.copy(editing = null, pickingOnMap = field, query = "", results = emptyList())
+  }
+
+  /**
+   * Long-press on the map while not driving. Picking a point for the planner sets that field;
+   * otherwise it plans a route to the point (it used to start driving straight away).
+   */
+  fun onMapLongPress(at: GeographicCoordinate) {
+    val pin = droppedPin(at)
+    val p = _plan.value
+    if (p.open && p.pickingOnMap != null) choosePlanPlace(pin) else openPlanner(to = pin, from = if (p.open) p.from else RouteStart.Here)
+    // Name the pin after the address there, when the geocoder knows it.
+    viewModelScope.launch {
+      val found = placesRepo.whatIsAt(LatLng(at.lat, at.lng)) ?: return@launch
+      val named = pin.copy(name = found.name, address = found.address ?: pin.address)
+      val now = _plan.value
+      _plan.value =
+          now.copy(
+              to = if (now.to?.id == pin.id) named else now.to,
+              from = (now.from as? RouteStart.At)?.takeIf { it.place.id == pin.id }?.let { RouteStart.At(named) } ?: now.from,
+          )
+      savedStore.update { s ->
+        s.copy(home = s.home?.takeIf { it.id != pin.id } ?: named.takeIf { s.home?.id == pin.id },
+            work = s.work?.takeIf { it.id != pin.id } ?: named.takeIf { s.work?.id == pin.id })
+      }
+    }
+  }
+
+  private fun droppedPin(at: GeographicCoordinate) =
+      Place(
+          id = "pin/${"%.5f".format(java.util.Locale.ROOT, at.lat)},${"%.5f".format(java.util.Locale.ROOT, at.lng)}",
+          name = L10n.s(R.string.plan_dropped_pin),
+          category = null,
+          lat = at.lat,
+          lon = at.lng,
+          address = "%.5f, %.5f".format(java.util.Locale.ROOT, at.lat, at.lng),
+      )
+
+  /** Start and destination change places (your location goes to the destination as an address is needed there). */
+  fun swapPlan() {
+    val p = _plan.value
+    val oldFrom = (p.from as? RouteStart.At)?.place
+    val to = p.to ?: return
+    if (oldFrom == null) {
+      // "From your location to X" becomes "from X to … your location": route to where the phone is now.
+      val here = here() ?: return
+      setPlan(p.copy(from = RouteStart.At(to), to = Place("here", L10n.s(R.string.plan_your_location), null, here.lat, here.lon)))
+    } else if (to.id == "here") {
+      setPlan(p.copy(from = RouteStart.Here, to = oldFrom))
+    } else {
+      setPlan(p.copy(from = RouteStart.At(to), to = oldFrom))
+    }
+  }
+
+  fun selectPlanRoute(index: Int) {
+    val p = _plan.value
+    if (index in p.options.indices) _plan.value = p.copy(selected = index)
+  }
+
+  /** Routes for the planner. From your location it waits for GPS, like a normal trip start. */
+  fun planRoutes() {
+    val p = _plan.value
+    val to = p.to ?: return
+    lastRequest = ::planRoutes
+    planJob?.cancel()
+    planJob =
+        viewModelScope.launch {
+          val from: UserLocation =
+              when (val start = p.from) {
+                is RouteStart.At -> UserLocation(GeographicCoordinate(start.place.lat, start.place.lon), 5.0, null, java.time.Instant.now(), null)
+                RouteStart.Here ->
+                    (if (!hasLocationPermission.value) browsingLocation.value else liveFix.value)
+                        ?: run {
+                          _routeStatus.value = RouteStatus.Loading(L10n.s(R.string.route_waiting_gps))
+                          withTimeoutOrNull(20_000) { liveFix.filterNotNull().first() }
+                        }
+                        ?: run {
+                          _routeStatus.value = RouteStatus.Failed(L10n.s(R.string.route_no_gps))
+                          return@launch
+                        }
+              }
+          _routeStatus.value = RouteStatus.Loading()
+          try {
+            val waypoints = listOf(Waypoint(GeographicCoordinate(to.lat, to.lon), WaypointKind.BREAK))
+            val ranked =
+                kotlinx.coroutines.withContext(Dispatchers.IO) {
+                  val routes =
+                      runCatching { alternatives.routes(from, waypoints) }
+                          .recoverCatching {
+                            if (it is kotlinx.coroutines.CancellationException) throw it
+                            core.getRoutes(from, waypoints)
+                          }
+                          .getOrThrow()
+                          .filter { it.geometry.size >= 2 }
+                  if (routes.isEmpty()) error(L10n.s(R.string.route_none))
+                  withBorderChecks(from, waypoints, routes)
+                }
+            if (_plan.value.to?.id != to.id || !_plan.value.open) return@launch
+            _plan.value = _plan.value.copy(options = ranked.take(3), selected = 0)
+            _routeStatus.value = RouteStatus.Idle
+            _planRoutesReady.tryEmit(Unit)
+          } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+          } catch (e: Exception) {
+            Log.e(TAG, "Planning failed", e)
+            _routeStatus.value = RouteStatus.Failed(routingError(e))
+          }
+        }
+  }
+
+  /**
+   * Drives the chosen route. From your location that is the real trip; from another address it is
+   * a simulated preview drive along it (the phone isn't there, so real guidance would reroute at once).
+   */
+  fun startPlannedTrip() {
+    val p = _plan.value
+    val to = p.to ?: return
+    val option = p.options.getOrNull(p.selected) ?: return
+    if (to.id != "here") rememberRecent(to)
+    (p.from as? RouteStart.At)?.place?.takeIf { it.id != "here" }?.let { rememberRecent(it) }
+    planJob?.cancel()
+    _plan.value = PlanState()
+    val dest = Waypoint(GeographicCoordinate(to.lat, to.lon), WaypointKind.BREAK)
+    beginTrip(listOf(option), dest, to.name, simulate = !p.fromHere, stops = emptyList())
+  }
+
+  private fun rememberRecent(place: Place) {
+    if (place.id == "here") return
+    savedStore.update { it.withRecent(place) }
+  }
+
+  fun clearSavedPlace(field: PlanField) {
+    savedStore.update {
+      when (field) {
+        PlanField.HOME -> it.copy(home = null)
+        PlanField.WORK -> it.copy(work = null)
+        else -> it
+      }
+    }
+  }
+
+  fun clearRecents() = savedStore.update { it.copy(recent = emptyList()) }
+
+  /** "On my way to Amersfoort, arriving around 10:42 (35 min)." for the share sheet; null when not driving. */
+  fun shareEtaText(now: java.time.LocalTime = java.time.LocalTime.now()): String? {
+    val ui = super.navigationUiState.value
+    if (!ui.isNavigating()) return null
+    val progress = ui.progress ?: return null
+    val delay = trafficAhead.value.sumOf { it.event.delaySeconds ?: 0.0 }
+    val total = progress.durationRemaining + delay
+    val at = now.plusSeconds(total.toLong()).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
+    val left = app.drivr.ui.formatDuration(total)
+    val name = destinationName
+    return if (name != null) L10n.s(R.string.share_eta_to, name, at, left) else L10n.s(R.string.share_eta, at, left)
+  }
+
   override fun toggleMute() {
     updateSettings { it.copy(voice = !it.voice) }
   }
 
   override fun stopNavigation() {
+    _plan.value = PlanState()
     destination = null
     simulating = false
     choiceTimeout?.cancel()

@@ -128,8 +128,6 @@
     <string name="menu_music">Musik</string>
     <string name="menu_settings">Einstellungen</string>
     <string name="menu_end">Fahrt beenden</string>
-    <string name="browse_long_press">Lange auf die Karte drücken, um dorthin zu fahren</string>
-    <string name="browse_or_simulate">oder eine simulierte Fahrt ausprobieren</string>
     <string name="osm_credit">© OpenStreetMap-Mitwirkende</string>
     <string name="browse_test_drive">Probefahrt</string>
     <string name="action_retry">Wiederholen</string>
@@ -244,4 +242,45 @@
     <string name="action_cancel">Abbrechen</string>
     <string name="route_controls_on">Gemeldete Kontrollen auf dieser Route: %1$d</string>
     <string name="route_controls_avoided">Umfährt gemeldete Kontrollen: %1$d</string>
+
+    <!-- Route planner, saved places, driving basics -->
+    <string name="plan_route">Route</string>
+    <string name="plan_start">Starten</string>
+    <string name="plan_preview_drive">Fahrt ansehen</string>
+    <string name="plan_preview_note">Du bist nicht am Startpunkt, daher wird die Fahrt simuliert</string>
+    <string name="plan_your_location">Dein Standort</string>
+    <string name="plan_choose_start">Startpunkt wählen</string>
+    <string name="plan_choose_on_map">Auf der Karte wählen</string>
+    <string name="plan_pick_on_map">Karte lange drücken, um das Ziel zu setzen</string>
+    <string name="plan_pick_start_on_map">Karte lange drücken, um den Start zu setzen</string>
+    <string name="plan_dropped_pin">Markierter Ort</string>
+    <string name="plan_swap">Start und Ziel tauschen</string>
+    <string name="plan_home">Zuhause</string>
+    <string name="plan_work">Arbeit</string>
+    <string name="plan_set_home">Zuhause festlegen</string>
+    <string name="plan_set_work">Arbeit festlegen</string>
+    <string name="plan_nothing_found">Nichts gefunden</string>
+    <string name="map_mute">Sprache aus</string>
+    <string name="map_unmute">Sprache an</string>
+    <string name="menu_share_eta">Ankunftszeit teilen</string>
+    <string name="share_eta_to">Unterwegs nach %1$s, Ankunft gegen %2$s (%3$s).</string>
+    <string name="share_eta">Unterwegs, Ankunft gegen %1$s (%2$s).</string>
+    <string name="end_trip_title">Fahrt beenden?</string>
+    <string name="end_trip_body">Die Führung nach %1$s wird beendet.</string>
+    <string name="end_trip_keep">Weiterfahren</string>
+    <string name="settings_route">Route</string>
+    <string name="settings_avoid_tolls">Maut vermeiden</string>
+    <string name="settings_avoid_tolls_sub">Mautstraßen, -brücken und -tunnel, wenn es anders geht</string>
+    <string name="settings_avoid_motorways">Autobahnen vermeiden</string>
+    <string name="settings_avoid_motorways_sub">Dauert länger; nur wenn es nicht anders geht</string>
+    <string name="settings_avoid_ferries">Fähren vermeiden</string>
+    <string name="settings_avoid_ferries_sub">Außer eine Fähre ist der einzige Weg</string>
+    <string name="settings_saved_places">Gespeicherte Orte</string>
+    <string name="settings_clear_recents">Letzte Ziele löschen</string>
+    <string name="settings_not_set">Nicht festgelegt</string>
+    <string name="settings_set">Festlegen</string>
+    <string name="settings_forget">Vergessen</string>
+    <string name="settings_developer">Entwickler</string>
+    <string name="settings_test_drive">Testfahrt-Taste</string>
+    <string name="settings_test_drive_sub">Zeigt eine simulierte Fahrt von Utrecht nach Amersfoort auf dem Startbildschirm</string>
 </resources>

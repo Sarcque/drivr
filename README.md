@@ -42,8 +42,20 @@ What works today:
   driving, it follows the car again after 10 s.
 - Lane guidance banner: maneuver, distance, and a lane strip drawn like the carriageway (dashed
   dividers, painted arrows from OSM `turn:lanes`, lanes to use highlighted).
-- "Start test drive": simulated drive from Utrecht Centraal over the A28 through Knooppunt
-  Rijnsweerd to Amersfoort. Long-press the map to route from your real location.
+- Route planner: **Route** on the start screen (or on a place, or a long-press on the map) opens
+  From / To fields with a swap button. The start can be your location, any address or place
+  (Photon search), a point picked on the map, home, work or a recent destination. Up to three
+  routes show on the map with time, distance and "via A28" before anything starts. From your
+  location the button says **Start**; from anywhere else it says **Preview drive** and plays the
+  trip as a simulation (the phone isn't at the start, so real guidance would reroute at once).
+- Start screen: Route, Home, Work and the last destinations as one-tap chips (kept on the phone
+  only; change or clear them in Settings › Saved places). The old test-drive card is gone; the
+  Utrecht → Amersfoort test drive is under Settings › Developer › Test drive button.
+- While driving: a voice on/off button on the map, **Share arrival time** in the ⋯ menu (Android
+  share sheet with "On my way to …, arriving around 10:42"), ending a trip asks first (menu or a tap
+  on the arrival card), and your speed turns red more than 3 km/h over the limit.
+- Settings › Route: avoid tolls, motorways or ferries. Sent to Valhalla as costing options on
+  every request, reroutes included (avoid, not forbid: a ferry-only island still gets a route).
 - Location from Android's own LocationManager (no Google Play Services).
 - Live traffic (Netherlands): accidents, jams, broken-down vehicles and closures from NDW, refreshed
   every 3 minutes. Shown on the map (jams turn the route red), a "Traffic jam in 4.2 km" card for
@@ -142,8 +154,9 @@ Next, in order of impact:
 6. **EV routing.** Battery model and charging stops (OSM chargers + Valhalla), plus live charger
    availability where open (NDW publishes Dutch charge point status as open data).
 7. **More fuel price feeds.** Spain, Italy, Austria (free, keyless); Germany (Tankerkönig, free key).
-8. **Voice and UX.** Natural voice per language (Piper TTS, on device), speed-limit warnings,
-   saved places, home/work, recent searches, multi-stop editing, dark/night map style.
+8. **Voice and UX.** Natural voice per language (Piper TTS, on device), a spoken speeding
+   warning, editing and reordering stops in the planner, a light day map style, live location
+   sharing (needs a backend; today Share sends the arrival time as text).
 9. **Per-country camera rules.** Turn camera warnings off where they're illegal (Germany,
    Switzerland) and show "danger zones" in France.
 
