@@ -11,6 +11,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -224,10 +228,29 @@ class BasicsScreenshotTest {
     }
   }
 
-  /** Settings: route preferences, saved places and the developer switch for the test drive. */
+  /** Settings: route preferences and saved places (the screen scrolled to them). */
   @Test
-  fun settings_route_saved_developer() {
-    paparazzi.unsafeUpdateConfig(deviceConfig = device.copy(screenHeight = 7200))
-    paparazzi.snapshot { SettingsScreen(Settings(avoidTolls = true), {}, {}, saved = saved) }
+  fun settings_route_saved() {
+    paparazzi.snapshot { ScrolledSettings(offset = 330) }
+  }
+
+  /** Settings, further down: Developer › Test drive button (off by default). */
+  @Test
+  fun settings_developer() {
+    paparazzi.snapshot { ScrolledSettings(offset = 1150) }
+  }
+
+  /** The settings screen as if scrolled down by [offset] dp (Paparazzi can't scroll). */
+  @Composable
+  private fun ScrolledSettings(offset: Int) {
+    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF0E1013))) {
+      Box(
+          Modifier.wrapContentHeight(align = Alignment.Top, unbounded = true)
+              .requiredHeight(2400.dp)
+              .offset(y = (-offset).dp)
+      ) {
+        SettingsScreen(Settings(avoidTolls = true), {}, {}, saved = saved)
+      }
+    }
   }
 }
