@@ -147,6 +147,10 @@ class PlacesRepository(
         .sortedBy { it.distanceM }
   }
 
+  /** What is at a point on the map (street and number, or a named place); null if unknown. */
+  suspend fun whatIsAt(at: LatLng): Place? =
+      withContext(Dispatchers.IO) { withTimeoutOrNull(5_000) { runCatching { photon.reverse(at) }.getOrNull() } }
+
   /** Typed search ("Albert Heijn", "IKEA"), biased to the car's position. */
   suspend fun search(text: String, here: LatLng, route: List<LatLng>?): List<PlaceResult> =
       withContext(Dispatchers.IO) {

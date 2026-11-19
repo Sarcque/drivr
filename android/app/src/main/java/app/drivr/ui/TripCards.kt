@@ -35,7 +35,7 @@ import kotlin.math.roundToInt
 
 /**
  * Bottom row while driving: speed limit + current speed on the left, then one low arrival card.
- * Tapping the arrival card ends the trip.
+ * Tapping the arrival card asks whether to end the trip.
  */
 @Composable
 fun TripCards(
@@ -119,12 +119,17 @@ private fun SpeedCard(limitKmh: Int?, speedKmh: Int?, modifier: Modifier = Modif
     Column {
       val mph = app.drivr.settings.DisplayUnits.imperial
       val shown = speedKmh?.let { if (mph) (it / 1.609344).roundToInt() else it }
-      Text("${shown ?: "–"}", color = Drivr.text, fontSize = 28.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp)
+      // Over the limit (with a small margin for GPS and speedometer differences): the number turns red.
+      val speeding = limitKmh != null && speedKmh != null && speedKmh > limitKmh + SPEEDING_MARGIN_KMH
+      Text("${shown ?: "–"}", color = if (speeding) Color(0xFFFF5A5F) else Drivr.text, fontSize = 28.sp, fontWeight = FontWeight.Bold, lineHeight = 30.sp)
       Text(if (mph) "mph" else "km/h", color = Drivr.textMuted, fontSize = 12.sp)
     }
     Spacer(Modifier.height(0.dp))
   }
 }
+
+/** km/h over the limit before the speed shows red. */
+internal const val SPEEDING_MARGIN_KMH = 3
 
 fun formatDuration(seconds: Double): String {
   val min = (seconds / 60).roundToInt().coerceAtLeast(1)

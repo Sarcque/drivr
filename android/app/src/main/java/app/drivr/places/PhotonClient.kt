@@ -57,6 +57,20 @@ class PhotonClient(
 
   private fun reverseUrl() = baseUrl.removeSuffix("/").removeSuffix("api").removeSuffix("/").plus("/reverse").toHttpUrl()
 
+  /** The nearest address or named place at [at] (for a pin dropped on the map), or null. */
+  suspend fun reverse(at: LatLng): Place? {
+    val url =
+        reverseUrl().newBuilder().apply {
+          addQueryParameter("lat", String.format(Locale.ROOT, "%.5f", at.lat))
+          addQueryParameter("lon", String.format(Locale.ROOT, "%.5f", at.lon))
+          addQueryParameter("limit", "1")
+        }.build()
+    return http.newCall(Request.Builder().url(url).header("User-Agent", USER_AGENT).build()).await {
+      if (!it.isSuccessful) throw PlacesException.http(it.code, url.toString())
+      parse(it.body.string()).firstOrNull()
+    }
+  }
+
   /** Typed search without blocking a thread. */
   suspend fun searchAsync(query: String, near: LatLng?, limit: Int = 15): List<Place> {
     val call = http.newCall(Request.Builder().url(searchUrl(query, near, limit)).header("User-Agent", USER_AGENT).build())

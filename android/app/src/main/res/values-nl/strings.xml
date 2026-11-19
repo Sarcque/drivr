@@ -128,8 +128,6 @@
     <string name="menu_music">Muziek</string>
     <string name="menu_settings">Instellingen</string>
     <string name="menu_end">Rit stoppen</string>
-    <string name="browse_long_press">Houd de kaart ingedrukt om erheen te gaan</string>
-    <string name="browse_or_simulate">of probeer een gesimuleerde rit</string>
     <string name="osm_credit">© OpenStreetMap-bijdragers</string>
     <string name="browse_test_drive">Proefrit</string>
     <string name="action_retry">Opnieuw</string>
@@ -244,4 +242,45 @@
     <string name="action_cancel">Annuleren</string>
     <string name="route_controls_on">Gemelde controles op deze route: %1$d</string>
     <string name="route_controls_avoided">Om gemelde controles heen: %1$d</string>
+
+    <!-- Route planner, saved places, driving basics -->
+    <string name="plan_route">Route</string>
+    <string name="plan_start">Starten</string>
+    <string name="plan_preview_drive">Rit bekijken</string>
+    <string name="plan_preview_note">Je bent niet bij het vertrekpunt, dus dit speelt de rit af als simulatie</string>
+    <string name="plan_your_location">Je locatie</string>
+    <string name="plan_choose_start">Kies een vertrekpunt</string>
+    <string name="plan_choose_on_map">Kies op de kaart</string>
+    <string name="plan_pick_on_map">Houd de kaart ingedrukt om de bestemming te kiezen</string>
+    <string name="plan_pick_start_on_map">Houd de kaart ingedrukt om het vertrekpunt te kiezen</string>
+    <string name="plan_dropped_pin">Gekozen punt</string>
+    <string name="plan_swap">Wissel vertrek en bestemming</string>
+    <string name="plan_home">Thuis</string>
+    <string name="plan_work">Werk</string>
+    <string name="plan_set_home">Thuis instellen</string>
+    <string name="plan_set_work">Werk instellen</string>
+    <string name="plan_nothing_found">Niets gevonden</string>
+    <string name="map_mute">Stem uit</string>
+    <string name="map_unmute">Stem aan</string>
+    <string name="menu_share_eta">Aankomsttijd delen</string>
+    <string name="share_eta_to">Onderweg naar %1$s, ik ben er rond %2$s (%3$s).</string>
+    <string name="share_eta">Onderweg, ik ben er rond %1$s (%2$s).</string>
+    <string name="end_trip_title">Rit beëindigen?</string>
+    <string name="end_trip_body">De begeleiding naar %1$s stopt.</string>
+    <string name="end_trip_keep">Doorrijden</string>
+    <string name="settings_route">Route</string>
+    <string name="settings_avoid_tolls">Tol vermijden</string>
+    <string name="settings_avoid_tolls_sub">Tolwegen, -bruggen en -tunnels, als er een andere weg is</string>
+    <string name="settings_avoid_motorways">Snelwegen vermijden</string>
+    <string name="settings_avoid_motorways_sub">Duurt langer; alleen als er geen andere weg is</string>
+    <string name="settings_avoid_ferries">Veerponten vermijden</string>
+    <string name="settings_avoid_ferries_sub">Behalve als een pont de enige weg is</string>
+    <string name="settings_saved_places">Opgeslagen plekken</string>
+    <string name="settings_clear_recents">Recente bestemmingen wissen</string>
+    <string name="settings_not_set">Niet ingesteld</string>
+    <string name="settings_set">Instellen</string>
+    <string name="settings_forget">Vergeten</string>
+    <string name="settings_developer">Ontwikkelaar</string>
+    <string name="settings_test_drive">Testrit-knop</string>
+    <string name="settings_test_drive_sub">Toont een gesimuleerde rit van Utrecht naar Amersfoort op het startscherm</string>
 </resources>

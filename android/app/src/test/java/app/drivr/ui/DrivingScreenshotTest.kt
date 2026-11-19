@@ -149,7 +149,7 @@ class DrivingScreenshotTest {
           Spacer(Modifier.padding(5.dp))
           CategoryChips(null, {})
         }
-        StartPanel(RouteStatus.Idle, {}, Modifier.align(Alignment.BottomCenter).padding(12.dp))
+        QuickPanel(app.drivr.places.SavedPlaces(), {}, {}, {}, {}, Modifier.align(Alignment.BottomCenter).padding(12.dp))
       }
     }
   }

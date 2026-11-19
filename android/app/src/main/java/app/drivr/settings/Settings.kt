@@ -33,6 +33,12 @@ data class Settings(
     val alwaysAvoidBorderChecks: Boolean = false,
     /** Always route around reported checks (police/traffic), even when slower. Off by default. */
     val alwaysAvoidChecks: Boolean = false,
+    /** Route preferences, sent to Valhalla as costing options (strong avoidance, not a ban). */
+    val avoidTolls: Boolean = false,
+    val avoidMotorways: Boolean = false,
+    val avoidFerries: Boolean = false,
+    /** Developer: show the simulated Utrecht → Amersfoort test drive on the start screen. Off by default. */
+    val showTestDrive: Boolean = false,
 )
 
 /** Settings kept in SharedPreferences, exposed as a flow. */
@@ -58,8 +64,13 @@ class SettingsStore(context: Context) {
         .putBoolean("borderChecks", next.borderChecks)
         .putBoolean("alwaysAvoidBorderChecks", next.alwaysAvoidBorderChecks)
         .putBoolean("alwaysAvoidChecks", next.alwaysAvoidChecks)
+        .putBoolean("avoidTolls", next.avoidTolls)
+        .putBoolean("avoidMotorways", next.avoidMotorways)
+        .putBoolean("avoidFerries", next.avoidFerries)
+        .putBoolean("showTestDrive", next.showTestDrive)
         .apply()
     DisplayUnits.imperial = next.units == Units.IMPERIAL
+    RoutePreferences.set(next)
   }
 
   private fun read(): Settings {
@@ -77,13 +88,52 @@ class SettingsStore(context: Context) {
             borderChecks = prefs.getBoolean("borderChecks", d.borderChecks),
             alwaysAvoidBorderChecks = prefs.getBoolean("alwaysAvoidBorderChecks", d.alwaysAvoidBorderChecks),
             alwaysAvoidChecks = prefs.getBoolean("alwaysAvoidChecks", d.alwaysAvoidChecks),
+            avoidTolls = prefs.getBoolean("avoidTolls", d.avoidTolls),
+            avoidMotorways = prefs.getBoolean("avoidMotorways", d.avoidMotorways),
+            avoidFerries = prefs.getBoolean("avoidFerries", d.avoidFerries),
+            showTestDrive = prefs.getBoolean("showTestDrive", d.showTestDrive),
             units = runCatching { Units.valueOf(prefs.getString("units", d.units.name)!!) }.getOrDefault(d.units),
         )
-        .also { DisplayUnits.imperial = it.units == Units.IMPERIAL }
+        .also {
+          DisplayUnits.imperial = it.units == Units.IMPERIAL
+          RoutePreferences.set(it)
+        }
   }
 }
 
 /** Read by the formatters, so every distance on screen follows the setting. */
 object DisplayUnits {
   @Volatile var imperial: Boolean = false
+}
+
+/**
+ * What to avoid, read by every route request (trip start, alternatives, reroutes), so a change in
+ * Settings applies to the next route without rebuilding the routing client.
+ */
+object RoutePreferences {
+  @Volatile var avoidTolls = false
+  @Volatile var avoidMotorways = false
+  @Volatile var avoidFerries = false
+
+  fun set(s: Settings) {
+    avoidTolls = s.avoidTolls
+    avoidMotorways = s.avoidMotorways
+    avoidFerries = s.avoidFerries
+  }
+
+  /**
+   * Adds Valhalla `costing_options.auto.use_tolls/use_highways/use_ferries` (0 = avoid as much as
+   * possible) to a route request body. Avoid, not exclude: when there is no other way (a ferry to an
+   * island), Valhalla still finds a route instead of failing.
+   */
+  fun applyTo(body: org.json.JSONObject): org.json.JSONObject {
+    if (!avoidTolls && !avoidMotorways && !avoidFerries) return body
+    val costing = body.optString("costing", "auto").ifEmpty { "auto" }
+    val all = body.optJSONObject("costing_options") ?: org.json.JSONObject().also { body.put("costing_options", it) }
+    val opts = all.optJSONObject(costing) ?: org.json.JSONObject().also { all.put(costing, it) }
+    if (avoidTolls) opts.put("use_tolls", 0.0)
+    if (avoidMotorways) opts.put("use_highways", 0.0)
+    if (avoidFerries) opts.put("use_ferries", 0.0)
+    return body
+  }
 }

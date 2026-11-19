@@ -128,8 +128,6 @@
     <string name="menu_music">Musique</string>
     <string name="menu_settings">Réglages</string>
     <string name="menu_end">Terminer le trajet</string>
-    <string name="browse_long_press">Appui long sur la carte pour y aller</string>
-    <string name="browse_or_simulate">ou essayez un trajet simulé</string>
     <string name="osm_credit">© contributeurs OpenStreetMap</string>
     <string name="browse_test_drive">Essai</string>
     <string name="action_retry">Réessayer</string>
@@ -244,4 +242,45 @@
     <string name="action_cancel">Annuler</string>
     <string name="route_controls_on">Contrôles signalés sur cet itinéraire : %1$d</string>
     <string name="route_controls_avoided">Évite les contrôles signalés : %1$d</string>
+
+    <!-- Route planner, saved places, driving basics -->
+    <string name="plan_route">Itinéraire</string>
+    <string name="plan_start">Démarrer</string>
+    <string name="plan_preview_drive">Aperçu du trajet</string>
+    <string name="plan_preview_note">Vous n\'êtes pas au départ : le trajet est joué en simulation</string>
+    <string name="plan_your_location">Votre position</string>
+    <string name="plan_choose_start">Choisir un point de départ</string>
+    <string name="plan_choose_on_map">Choisir sur la carte</string>
+    <string name="plan_pick_on_map">Appuyez longuement sur la carte pour choisir la destination</string>
+    <string name="plan_pick_start_on_map">Appuyez longuement sur la carte pour choisir le départ</string>
+    <string name="plan_dropped_pin">Point choisi</string>
+    <string name="plan_swap">Inverser départ et destination</string>
+    <string name="plan_home">Domicile</string>
+    <string name="plan_work">Travail</string>
+    <string name="plan_set_home">Définir le domicile</string>
+    <string name="plan_set_work">Définir le travail</string>
+    <string name="plan_nothing_found">Aucun résultat</string>
+    <string name="map_mute">Couper la voix</string>
+    <string name="map_unmute">Activer la voix</string>
+    <string name="menu_share_eta">Partager l\'heure d\'arrivée</string>
+    <string name="share_eta_to">En route vers %1$s, arrivée vers %2$s (%3$s).</string>
+    <string name="share_eta">En route, arrivée vers %1$s (%2$s).</string>
+    <string name="end_trip_title">Terminer ce trajet ?</string>
+    <string name="end_trip_body">Le guidage vers %1$s s\'arrête.</string>
+    <string name="end_trip_keep">Continuer</string>
+    <string name="settings_route">Itinéraire</string>
+    <string name="settings_avoid_tolls">Éviter les péages</string>
+    <string name="settings_avoid_tolls_sub">Routes, ponts et tunnels à péage, s\'il existe un autre chemin</string>
+    <string name="settings_avoid_motorways">Éviter les autoroutes</string>
+    <string name="settings_avoid_motorways_sub">Plus long ; seulement s\'il n\'y a pas d\'autre chemin</string>
+    <string name="settings_avoid_ferries">Éviter les ferries</string>
+    <string name="settings_avoid_ferries_sub">Sauf si le ferry est le seul chemin</string>
+    <string name="settings_saved_places">Lieux enregistrés</string>
+    <string name="settings_clear_recents">Effacer les destinations récentes</string>
+    <string name="settings_not_set">Non défini</string>
+    <string name="settings_set">Définir</string>
+    <string name="settings_forget">Oublier</string>
+    <string name="settings_developer">Développeur</string>
+    <string name="settings_test_drive">Bouton trajet test</string>
+    <string name="settings_test_drive_sub">Affiche un trajet simulé d\'Utrecht à Amersfoort sur l\'écran d\'accueil</string>
 </resources>

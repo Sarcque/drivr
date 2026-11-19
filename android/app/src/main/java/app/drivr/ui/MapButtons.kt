@@ -46,7 +46,7 @@ import app.drivr.RouteStatus
 /** One map action in the button column. */
 data class MapAction(val label: String, val icon: MapIcon, val onClick: () -> Unit)
 
-enum class MapIcon { Search, Overview, Recenter, More }
+enum class MapIcon { Search, Overview, Recenter, More, Sound, Muted }
 
 private val ButtonSize = 52.dp
 private val ButtonGap = 10.dp
@@ -121,6 +121,28 @@ fun MapRoundButton(icon: MapIcon, label: String, onClick: () -> Unit, modifier: 
             drawPath(p, Drivr.text, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round))
             drawCircle(Drivr.text, 2.5.dp.toPx(), Offset(w * 0.2f, h * 0.85f))
             drawCircle(Drivr.accent, 3.dp.toPx(), Offset(w * 0.8f, h * 0.15f))
+          }
+      MapIcon.Sound, MapIcon.Muted ->
+          Canvas(Modifier.size(22.dp)) {
+            // A speaker; sound waves when on, a cross when muted.
+            val w = size.width
+            val h = size.height
+            val muted = icon == MapIcon.Muted
+            val c = if (muted) Color(0xFFFF8A80) else Drivr.text
+            drawPath(
+                Path().apply {
+                  moveTo(w * 0.08f, h * 0.36f); lineTo(w * 0.28f, h * 0.36f); lineTo(w * 0.52f, h * 0.12f)
+                  lineTo(w * 0.52f, h * 0.88f); lineTo(w * 0.28f, h * 0.64f); lineTo(w * 0.08f, h * 0.64f); close()
+                },
+                c)
+            val sw = 2.dp.toPx()
+            if (muted) {
+              drawLine(c, Offset(w * 0.66f, h * 0.36f), Offset(w * 0.94f, h * 0.64f), sw, StrokeCap.Round)
+              drawLine(c, Offset(w * 0.94f, h * 0.36f), Offset(w * 0.66f, h * 0.64f), sw, StrokeCap.Round)
+            } else {
+              drawArc(c, -50f, 100f, false, Offset(w * 0.42f, h * 0.3f), androidx.compose.ui.geometry.Size(w * 0.3f, h * 0.4f), style = Stroke(sw, cap = StrokeCap.Round))
+              drawArc(c, -55f, 110f, false, Offset(w * 0.38f, h * 0.12f), androidx.compose.ui.geometry.Size(w * 0.56f, h * 0.76f), style = Stroke(sw, cap = StrokeCap.Round))
+            }
           }
       MapIcon.Recenter ->
           Canvas(Modifier.size(22.dp)) {
