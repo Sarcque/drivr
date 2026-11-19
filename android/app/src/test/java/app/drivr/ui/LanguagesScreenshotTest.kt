@@ -77,11 +77,12 @@ class LanguagesScreenshotTest {
         Image(bmp, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 36.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
           InstructionBanner(baarn, 1500.0)
-          Box(Modifier.weight(1f))
+          // Both alert kinds, for the text; the app shows one at a time under the banner.
           val jam = TrafficEvent("j", TrafficKind.JAM, listOf(LatLon(52.1, 5.2)), delaySeconds = 420.0, queueLengthM = 2800.0)
           TrafficAheadCard(TrafficAhead(jam, 4200.0))
           val cam = SpeedCamera("c", CameraKind.SECTION, LatLng(52.1, 5.2), maxSpeedKmh = 100)
           CameraAheadCard(CameraAhead(cam, 1800.0, 6400.0), null)
+          Box(Modifier.weight(1f))
           TripCards(speedLimitKmh = 100, speedKmh = 96, distanceRemainingM = 57_400.0, durationRemainingS = 4500.0,
               onEnd = null, trafficDelayS = 420.0, now = LocalTime.of(15, 12))
         }

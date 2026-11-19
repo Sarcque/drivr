@@ -52,7 +52,7 @@ fun ChevronPuck(ui: NavigationUiState) {
   )
 }
 
-private class ChevronPainter : Painter() {
+internal class ChevronPainter : Painter() {
   override val intrinsicSize: Size = Size.Unspecified
 
   override fun DrawScope.onDraw() {

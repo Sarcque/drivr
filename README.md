@@ -38,6 +38,8 @@ What works today:
   500 m, plus a heads-up 1.5 km before that on motorways).
 - One layout for everything over the map (banner, a single button column on the right, cards at
   the bottom; a side column in landscape), so nothing overlaps.
+  The car always sits in the clear band above the low arrival card; if you pan the map while
+  driving, it follows the car again after 10 s.
 - Lane guidance banner: maneuver, distance, and a lane strip drawn like the carriageway (dashed
   dividers, painted arrows from OSM `turn:lanes`, lanes to use highlighted).
 - "Start test drive": simulated drive from Utrecht Centraal over the A28 through Knooppunt
@@ -45,7 +47,8 @@ What works today:
 - Location from Android's own LocationManager (no Google Play Services).
 - Live traffic (Netherlands): accidents, jams, broken-down vehicles and closures from NDW, refreshed
   every 3 minutes. Shown on the map (jams turn the route red), a "Traffic jam in 4.2 km" card for
-  the next event on your side of the road, and reported delays added to the arrival time.
+  the next event on your side of the road (under the turn banner; swipe it away and it stays away
+  for that event), and reported delays added to the arrival time.
 - Settings (gear on the start screen, or ⋯ while driving): voice, AR, speed cameras, traffic,
   3D buildings, km or miles. AR is off by default.
 - Languages: English, Dutch, German, French and Spanish. Drivr follows the phone's language (on
