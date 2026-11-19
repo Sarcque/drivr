@@ -53,8 +53,75 @@ fun SettingsScreen(
     /** Picked language tag, "" to follow the phone. */
     language: String = "",
     onLanguage: (String) -> Unit = {},
+    /** Open with the "no guarantee" popup showing (screenshots). */
+    showChecksDisclaimer: Boolean = false,
 ) {
-  Column(modifier.fillMaxSize().background(Color(0xFF0E1013)).statusBarsPadding().navigationBarsPadding()) {
+  var disclaimer by remember { mutableStateOf(showChecksDisclaimer) }
+  Box(modifier.fillMaxSize()) {
+  SettingsContent(settings, onChange, onClose, musicAccess, onMusicAccess, language, onLanguage) { disclaimer = true }
+  if (disclaimer) {
+    ChecksDisclaimer(
+        onCancel = { disclaimer = false },
+        onAccept = {
+          disclaimer = false
+          onChange { it.copy(alwaysAvoidChecks = true) }
+        },
+    )
+  }
+  }
+}
+
+/**
+ * Before "always avoid checks" goes on: it can only avoid checks that a feed reports, in time.
+ * Drawn in the screen (not a system dialog) so it matches the app and shows in screenshots.
+ */
+@Composable
+fun ChecksDisclaimer(onCancel: () -> Unit, onAccept: () -> Unit) {
+  Box(Modifier.fillMaxSize().background(Color(0xB3000000)).clickable(onClick = onCancel), contentAlignment = Alignment.Center) {
+    Column(
+        Modifier.padding(24.dp).clip(RoundedCornerShape(Drivr.cardRadius)).background(Drivr.card).clickable(enabled = false) {}
+            .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 14.dp),
+    ) {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(28.dp).clip(CircleShape).background(Drivr.hint), contentAlignment = Alignment.Center) {
+          Text("!", color = Drivr.card, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        }
+        Spacer(Modifier.size(12.dp))
+        Text(stringResource(R.string.checks_disclaimer_title), color = Drivr.text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
+      }
+      Spacer(Modifier.height(12.dp))
+      Text(stringResource(R.string.checks_disclaimer_body), color = Drivr.text, fontSize = 15.sp, lineHeight = 21.sp)
+      Spacer(Modifier.height(8.dp))
+      Text(stringResource(R.string.checks_disclaimer_sources), color = Drivr.textMuted, fontSize = 13.sp, lineHeight = 18.sp)
+      Spacer(Modifier.height(16.dp))
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            stringResource(R.string.action_cancel), color = Drivr.text, fontSize = 15.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Drivr.cardBand).clickable(onClick = onCancel).padding(vertical = 11.dp),
+        )
+        Text(
+            stringResource(R.string.checks_disclaimer_accept), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(Drivr.accent).clickable(onClick = onAccept).padding(vertical = 11.dp),
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun SettingsContent(
+    settings: Settings,
+    onChange: ((Settings) -> Settings) -> Unit,
+    onClose: () -> Unit,
+    musicAccess: Boolean,
+    onMusicAccess: () -> Unit,
+    language: String,
+    onLanguage: (String) -> Unit,
+    askDisclaimer: () -> Unit,
+) {
+  Column(Modifier.fillMaxSize().background(Color(0xFF0E1013)).statusBarsPadding().navigationBarsPadding()) {
     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
       Text(stringResource(R.string.settings_title), color = Drivr.text, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
       Text(stringResource(R.string.action_done), color = Drivr.accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
@@ -66,6 +133,14 @@ fun SettingsScreen(
         Toggle(stringResource(R.string.settings_voice), stringResource(R.string.settings_voice_sub), settings.voice) { v -> onChange { it.copy(voice = v) } }
         Toggle(stringResource(R.string.settings_ar), stringResource(R.string.settings_ar_sub), settings.arEnabled) { v -> onChange { it.copy(arEnabled = v) } }
         Toggle(stringResource(R.string.settings_ar_auto), stringResource(R.string.settings_ar_auto_sub), settings.arAuto, enabled = settings.arEnabled) { v -> onChange { it.copy(arAuto = v) } }
+      }
+      Section(stringResource(R.string.settings_checks)) {
+        Toggle(stringResource(R.string.settings_border_checks), stringResource(R.string.settings_border_checks_sub), settings.borderChecks) { v -> onChange { it.copy(borderChecks = v) } }
+        Toggle(stringResource(R.string.settings_always_avoid_border), stringResource(R.string.settings_always_avoid_border_sub), settings.alwaysAvoidBorderChecks) { v -> onChange { it.copy(alwaysAvoidBorderChecks = v) } }
+        Toggle(stringResource(R.string.settings_always_avoid_checks), stringResource(R.string.settings_always_avoid_checks_sub), settings.alwaysAvoidChecks) { v ->
+          // Switching on first explains the limits; it only goes on after "Understood".
+          if (v) askDisclaimer() else onChange { it.copy(alwaysAvoidChecks = false) }
+        }
       }
       Section(stringResource(R.string.settings_alerts)) {
         Toggle(stringResource(R.string.settings_cameras), stringResource(R.string.settings_cameras_sub), settings.speedCameras) { v -> onChange { it.copy(speedCameras = v) } }

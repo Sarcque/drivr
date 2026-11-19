@@ -8,6 +8,7 @@ import app.drivr.traffic.TrafficAhead
 import app.drivr.traffic.TrafficEvent
 import app.drivr.traffic.TrafficRepository
 import app.drivr.traffic.RouteChoice
+import app.drivr.traffic.BorderChecks
 import app.drivr.traffic.ScoredRoute
 import app.drivr.cameras.CameraAhead
 import app.drivr.cameras.SectionTracker
@@ -46,6 +47,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import uniffi.ferrostar.GeographicCoordinate
 import uniffi.ferrostar.UserLocation
 import uniffi.ferrostar.Waypoint
@@ -105,6 +107,7 @@ class DrivrViewModel(
     private val cameraClient: SpeedCameraClient = AppModule.speedCameras,
     private val settingsStore: app.drivr.settings.SettingsStore = AppModule.settings,
     private val alternatives: AlternativeRoutesClient = AppModule.alternativeRoutes,
+    private val borderReports: app.drivr.traffic.BorderReportsClient = AppModule.borderReports,
 ) : DefaultNavigationViewModel(core, valhallaExtendedOSRMAnnotationPublisher()) {
 
   private val hasLocationPermission = MutableStateFlow(false)
@@ -332,8 +335,9 @@ class DrivrViewModel(
                 .getOrThrow()
                 .filter { it.geometry.size >= 2 }
         if (routes.isEmpty()) error(L10n.s(R.string.route_none))
-        // Valhalla's times have no live traffic: rank with the NDW jams on each route.
-        val ranked = rankRoutes(routes, traffic.events.value)
+        // Valhalla's times have no live traffic: rank with the NDW jams on each route. Going into
+        // Germany over a checkpoint, also ask for a way around it and for live check reports.
+        val ranked = withBorderChecks(from, waypoints, routes)
         val route = ranked.first().route
         Log.i(TAG, "Route: ${route.geometry.size} points, ${route.distance.toInt()} m, ${ranked.size} option(s)")
         clearFasterRoute()
@@ -359,13 +363,66 @@ class DrivrViewModel(
 
   // ---- Route choice: alternatives at the start, and a faster way around jams while driving -----
 
+  /**
+   * Ranks [routes]. When one enters Germany over a checkpoint (and the setting is on), or the driver
+   * wants to avoid reported checks, fetches live reports (Autobahn GmbH; NDW is already in the
+   * traffic) and asks for the best route around the checkpoints / reported checks. Both extra calls
+   * are short-timed and optional: without them the plain ranking stands. With "always avoid", the
+   * route around comes first (and is driven), even when it is slower.
+   */
+  private suspend fun withBorderChecks(
+      from: UserLocation,
+      waypoints: List<Waypoint>,
+      routes: List<uniffi.ferrostar.Route>,
+  ): List<RouteOption> {
+    val st = settingsStore.state.value
+    val events = traffic.events.value
+    val geoms = routes.map { r -> r.geometry.map { LatLon(it.lat, it.lng) } }
+    val checks =
+        if (st.borderChecks || st.alwaysAvoidBorderChecks) geoms.mapNotNull { BorderChecks.checkOn(it)?.crossing }.distinct()
+        else emptyList()
+    val roads =
+        if (st.alwaysAvoidChecks)
+            BorderChecks.motorways(routes.flatMap { r -> r.steps.flatMap { listOf(it.roadName, RouteChoice.stepRoad(it.roadName, it.instruction, 0.0).name) } })
+        else emptyList()
+    if (checks.isEmpty() && roads.isEmpty()) return rankRoutes(routes, events)
+    _routeStatus.value = RouteStatus.Loading(L10n.s(R.string.route_checking_border))
+    val live = withTimeoutOrNull(BORDER_REPORTS_TIMEOUT_MS) { borderReports.reports(checks, roads) }
+    val controls = live?.controls.orEmpty()
+    val controlsToAvoid = if (st.alwaysAvoidChecks) geoms.flatMap { BorderChecks.controlsOn(it, controls) }.distinct() else emptyList()
+    val polygons = BorderChecks.avoidFor(checks, controlsToAvoid.map { it.at })
+    val around =
+        if (polygons.length() == 0) null
+        else
+            withTimeoutOrNull(BORDER_ROUTE_TIMEOUT_MS) {
+              runCatching { alternatives.routes(from, waypoints, avoid = polygons) }
+                  .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it; Log.w(TAG, "No route around the checks", it) }
+                  .getOrNull()
+                  ?.firstOrNull { it.geometry.size >= 2 }
+            }
+    val all = routes + listOfNotNull(around)
+    val avoiding = routes.map { null } + listOfNotNull(around?.let { checks.firstOrNull() })
+    val avoidingControls = routes.map { 0 } + listOfNotNull(around?.let { controlsToAvoid.size })
+    Log.i(TAG, "Checks: border ${checks.joinToString { it.label }}, ${controlsToAvoid.size} reported on route; around: ${around != null}; live: ${live != null}")
+    val ranked =
+        rankRoutes(all, events, BorderContext(live?.border, avoiding, controls = controls, avoidingControls = avoidingControls))
+    val forceAround = (st.alwaysAvoidBorderChecks && checks.isNotEmpty()) || (st.alwaysAvoidChecks && controlsToAvoid.isNotEmpty())
+    val aroundOption = ranked.firstOrNull { it.route === around }
+    return if (forceAround && aroundOption != null) listOf(aroundOption) + (ranked - aroundOption) else ranked
+  }
+
   private fun showRouteChoice(ranked: List<RouteOption>) {
     choiceTimeout?.cancel()
     if (ranked.size < 2) {
       _routeChoice.value = null
       return
     }
-    _routeChoice.value = RouteChoiceState(ranked.take(3))
+    // Up to three ways, plus the way around a border check whenever there is one.
+    val shown = ranked.take(3).let { top ->
+      val around = ranked.firstOrNull { it.score.border?.let { b -> b.avoids != null || b.avoidsControls > 0 } == true }
+      if (around == null || around in top) top else top + around
+    }
+    _routeChoice.value = RouteChoiceState(shown)
     // Gone by itself after a while, so the drive starts calm even if nobody taps it.
     choiceTimeout = viewModelScope.launch {
       kotlinx.coroutines.delay(CHOICE_VISIBLE_MS)
@@ -668,7 +725,9 @@ class DrivrViewModel(
 
   companion object {
     private const val TAG = "DrivrViewModel"
-    private const val CHOICE_VISIBLE_MS = 15_000L
+    private const val CHOICE_VISIBLE_MS = 25_000L
+    private const val BORDER_ROUTE_TIMEOUT_MS = 12_000L
+    private const val BORDER_REPORTS_TIMEOUT_MS = 6_000L
     private const val FASTER_ROUTE_VISIBLE_MS = 45_000L
     private const val FASTER_ROUTE_CHECK_EVERY_MS = 4 * 60_000L
     /** Only jams this close count: further ones may clear before we get there. */

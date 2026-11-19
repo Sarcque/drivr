@@ -27,6 +27,12 @@ data class Settings(
     val musicWhileDriving: Boolean = false,
     /** Offer a quicker way when a jam is ahead (the driver decides; never switches by itself). */
     val fasterRoutes: Boolean = true,
+    /** Into Germany over a border checkpoint: offer a way around it and show live reports. */
+    val borderChecks: Boolean = true,
+    /** Always drive the route around border checkpoints, even when it is slower. Off by default. */
+    val alwaysAvoidBorderChecks: Boolean = false,
+    /** Always route around reported checks (police/traffic), even when slower. Off by default. */
+    val alwaysAvoidChecks: Boolean = false,
 )
 
 /** Settings kept in SharedPreferences, exposed as a flow. */
@@ -49,6 +55,9 @@ class SettingsStore(context: Context) {
         .putString("units", next.units.name)
         .putBoolean("musicWhileDriving", next.musicWhileDriving)
         .putBoolean("fasterRoutes", next.fasterRoutes)
+        .putBoolean("borderChecks", next.borderChecks)
+        .putBoolean("alwaysAvoidBorderChecks", next.alwaysAvoidBorderChecks)
+        .putBoolean("alwaysAvoidChecks", next.alwaysAvoidChecks)
         .apply()
     DisplayUnits.imperial = next.units == Units.IMPERIAL
   }
@@ -65,6 +74,9 @@ class SettingsStore(context: Context) {
             buildings3d = prefs.getBoolean("buildings3d", d.buildings3d),
             musicWhileDriving = prefs.getBoolean("musicWhileDriving", d.musicWhileDriving),
             fasterRoutes = prefs.getBoolean("fasterRoutes", d.fasterRoutes),
+            borderChecks = prefs.getBoolean("borderChecks", d.borderChecks),
+            alwaysAvoidBorderChecks = prefs.getBoolean("alwaysAvoidBorderChecks", d.alwaysAvoidBorderChecks),
+            alwaysAvoidChecks = prefs.getBoolean("alwaysAvoidChecks", d.alwaysAvoidChecks),
             units = runCatching { Units.valueOf(prefs.getString("units", d.units.name)!!) }.getOrDefault(d.units),
         )
         .also { DisplayUnits.imperial = it.units == Units.IMPERIAL }
