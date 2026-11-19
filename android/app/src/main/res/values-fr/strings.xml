@@ -77,6 +77,7 @@
     <string name="banner_then">Puis</string>
     <string name="trip_arrival">ARRIVÉE</string>
     <string name="trip_traffic_delay">dont +%1$s de trafic</string>
+    <string name="alert_dismiss">Masquer</string>
     <string name="duration_min">%1$d min</string>
     <string name="duration_h_min">%1$d h %2$d min</string>
     <string name="traffic_queue_long">%1$s de long</string>

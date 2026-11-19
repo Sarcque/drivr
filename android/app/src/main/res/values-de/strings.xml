@@ -77,6 +77,7 @@
     <string name="banner_then">Dann</string>
     <string name="trip_arrival">ANKUNFT</string>
     <string name="trip_traffic_delay">inkl. +%1$s Verkehr</string>
+    <string name="alert_dismiss">Ausblenden</string>
     <string name="duration_min">%1$d Min.</string>
     <string name="duration_h_min">%1$d Std. %2$d Min.</string>
     <string name="traffic_queue_long">%1$s lang</string>

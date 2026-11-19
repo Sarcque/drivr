@@ -82,6 +82,10 @@ class DrivingScreenshotTest {
         Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 36.dp),
         top = {
           InstructionBanner(instruction, distanceM)
+          if (withAlert) {
+            val lane = TrafficEvent("l", TrafficKind.LANE_CLOSED, listOf(LatLon(52.1, 5.2)))
+            DrivingAlert(emptyList(), null, listOf(TrafficAhead(lane, 23_000.0)), onDismiss = {})
+          }
           RouteStatusCard(status, {}, {})
         },
         buttons = { m ->
@@ -93,10 +97,6 @@ class DrivingScreenshotTest {
         },
         bottom = {
           Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (withAlert) {
-              val lane = TrafficEvent("l", TrafficKind.LANE_CLOSED, listOf(LatLon(52.1, 5.2)))
-              DrivingAlert(emptyList(), null, listOf(TrafficAhead(lane, 23_000.0)))
-            }
             TripCards(speedLimitKmh = 30, speedKmh = null, distanceRemainingM = 57_000.0, durationRemainingS = 2700.0,
                 onEnd = null, now = LocalTime.of(15, 12))
           }

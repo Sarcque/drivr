@@ -55,6 +55,7 @@ import uniffi.ferrostar.VisualInstructionContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -189,6 +190,10 @@ fun NavigationScene(viewModel: DrivrViewModel) {
   val nearManeuver = (uiState.progress?.distanceToNextManeuver ?: Double.MAX_VALUE) < 300.0
   val showAr = settings.arEnabled && navigating && (arManual || (settings.arAuto && !arSnoozed && nearManeuver))
 
+  // Alerts swiped away this trip (by key, see drivingAlertCandidates).
+  var dismissedAlerts by rememberSaveable { mutableStateOf(listOf<String>()) }
+  LaunchedEffect(navigating) { if (!navigating) dismissedAlerts = emptyList() }
+
   // Measured overlay sizes, so the camera keeps the car and route clear of the cards.
   val density = LocalDensity.current
   var topCardsH by remember { mutableStateOf(0.dp) }
@@ -208,6 +213,17 @@ fun NavigationScene(viewModel: DrivrViewModel) {
             top = (if (landscape) 0.dp else topCardsH) + 40.dp,
             bottom = (if (landscape) 0.dp else bottomCardsH) + 40.dp),
     )
+  }
+
+  // Panned the map while driving? Follow the car again after 10 s without touching it, so the
+  // car never stays off screen. Not while a places list or the turn list is open.
+  val freeCamera = navigating && mapState.cameraMode == NavigationCameraMode.FREE && !places.open && places.selected == null && !showTurns
+  LaunchedEffect(freeCamera) {
+    if (!freeCamera) return@LaunchedEffect
+    androidx.compose.runtime.snapshotFlow { mapState.cameraState.position }.collectLatest {
+      kotlinx.coroutines.delay(10_000)
+      mapState.recenter(isNavigating = true)
+    }
   }
 
   // A new trip: show the whole route for a few seconds, then follow the car.
@@ -283,6 +299,18 @@ fun NavigationScene(viewModel: DrivrViewModel) {
         )
       }
     }
+    // Camera / traffic alert: under the banner (not over the car), swipe to dismiss. Hidden
+    // while a route choice or faster-route offer is on screen, so there is one thing at a time.
+    val alert: @Composable () -> Unit = {
+      if (uiState.progress != null && routeChoice == null && fasterRoute == null) {
+        DrivingAlert(
+            camerasAhead.first, camerasAhead.second,
+            if (settings.trafficAlerts) trafficAhead else emptyList(),
+            dismissed = dismissedAlerts,
+            onDismiss = { dismissedAlerts = dismissedAlerts + it },
+        )
+      }
+    }
     val status: @Composable (Modifier) -> Unit = { m ->
       RouteStatusCard(routeStatus, viewModel::retryRoute, viewModel::dismissRouteStatus, m)
     }
@@ -312,10 +340,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
                     onSwitch = viewModel::switchToFasterRoute,
                     onKeep = viewModel::keepCurrentRoute,
                 )
-            else ->
-                DrivingAlert(
-                    camerasAhead.first, camerasAhead.second,
-                    if (settings.trafficAlerts) trafficAhead else emptyList())
+            else -> {}
           }
           TripCards(
               speedLimitKmh = uiState.speedLimitKmh(),
@@ -376,7 +401,10 @@ fun NavigationScene(viewModel: DrivrViewModel) {
       SideOverlay(
           safe,
           top = {
-            if (!places.open) banner(Modifier)
+            if (!places.open) {
+              banner(Modifier)
+              alert()
+            }
             status(Modifier)
           },
           buttons = buttons,
@@ -388,6 +416,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
           safe,
           top = {
             banner(Modifier)
+            alert()
             status(Modifier)
           },
           buttons = buttons,
@@ -499,22 +528,40 @@ internal fun StartPanel(status: RouteStatus, onDemoDrive: () -> Unit, modifier: 
 }
 
 /**
- * At most one alert above the arrival card, the most urgent: inside an average-speed section or
- * a camera close by, then being inside a jam, then the next jam within 30 km.
+ * At most one alert, under the turn banner, the most urgent: inside an average-speed section or
+ * a camera close by, then being inside a jam, then the next jam within 30 km. Each can be swiped
+ * away; a swiped alert stays away for this trip ([dismissed] holds its key) and the next one in
+ * line shows instead. Entering a jam you swiped away earlier shows its countdown once more.
  */
 @Composable
 fun DrivingAlert(
     cameras: List<app.drivr.cameras.CameraAhead>,
     averageKmh: Double?,
     traffic: List<app.drivr.traffic.TrafficAhead>,
+    dismissed: Collection<String> = emptyList(),
+    onDismiss: ((String) -> Unit)? = null,
 ) {
-  val cam = cameras.firstOrNull { it.inside } ?: cameras.firstOrNull { it.distanceM < 1000 }
-  val jam = traffic.firstOrNull { it.inside }
-  when {
-    cam != null -> CameraAheadCard(cam, averageKmh)
-    jam != null -> JamCountdownCard(jam)
-    else -> traffic.firstOrNull { it.distanceM < 30_000 }?.let { TrafficAheadCard(it) }
+  val pick = drivingAlertCandidates(cameras, traffic).firstOrNull { it.first !in dismissed } ?: return
+  val (key, show) = pick
+  val card: @Composable () -> Unit = {
+    when (show) {
+      is app.drivr.cameras.CameraAhead -> CameraAheadCard(show, averageKmh)
+      is app.drivr.traffic.TrafficAhead -> if (show.inside) JamCountdownCard(show) else TrafficAheadCard(show)
+    }
   }
+  if (onDismiss == null) card()
+  else SwipeAway(key, onDismiss = { onDismiss(key) }, dismissLabel = stringResource(R.string.alert_dismiss)) { card() }
+}
+
+/** Alerts in order of urgency, each with the key it is dismissed by. */
+internal fun drivingAlertCandidates(
+    cameras: List<app.drivr.cameras.CameraAhead>,
+    traffic: List<app.drivr.traffic.TrafficAhead>,
+): List<Pair<String, Any>> = buildList {
+  cameras.filter { it.inside }.forEach { add("cam-in:${it.camera.id}" to it) }
+  cameras.filter { !it.inside && it.distanceM < 1000 }.forEach { add("cam:${it.camera.id}" to it) }
+  traffic.filter { it.inside && it.endM != null }.forEach { add("jam-in:${it.event.id}" to it) }
+  traffic.filter { !it.inside && it.distanceM < 30_000 }.forEach { add("traffic:${it.event.id}" to it) }
 }
 
 @Composable
