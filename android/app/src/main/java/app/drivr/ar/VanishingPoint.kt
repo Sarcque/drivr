@@ -136,7 +136,24 @@ class VanishingPointEstimator(
     if (n == 0) return null
     val threshold = max(110f, (sum / n).toFloat() * 2.5f)
 
+    fun continues(x: Int, y: Int, dx: Float, dy: Float, nx: Float, ny: Float, step: Int): Boolean {
+      val x2 = (x + dx * step).roundToInt()
+      val y2 = (y + dy * step).roundToInt()
+      if (x2 !in 1 until w - 1 || y2 !in 1 until h - 1) return false
+      val j = y2 * w + x2
+      val m2 = mags[j]
+      if (m2 < 0.5f * threshold) return false
+      // Same edge direction (gradient within ~18°, either polarity is the same edge's side).
+      return (gxs[j] * nx + gys[j] * ny) / m2 > 0.95f
+    }
+
     var edges = 0
+    // Every voting edge, kept for the fine fit: position, unit normal, weight.
+    val ex = FloatList()
+    val ey = FloatList()
+    val enx = FloatList()
+    val eny = FloatList()
+    val ew = FloatList()
     for (y in firstRow until h - 1) {
       for (x in 1 until w - 1) {
         val i = y * w + x
@@ -149,7 +166,18 @@ class VanishingPointEstimator(
         // ones (poles, trees, buildings) don't point down the road.
         val slant = abs(dy)
         if (slant < 0.22f || slant > 0.96f) continue
+        // Glare: the rim of a blown-out patch (sun, headlights, reflections on a wet road) is a
+        // strong edge pointing nowhere in particular.
+        if (nearSaturated(img, x, y)) continue
+        // Only edges that continue as a straight line: lane lines, kerbs and road edges do,
+        // raindrops, smudges and sensor noise don't.
+        if (!continues(x, y, dx, dy, gxs[i] / m, gys[i] / m, 4) || !continues(x, y, -dx, -dy, gxs[i] / m, gys[i] / m, 4)) continue
         edges++
+        ex += x.toFloat()
+        ey += y.toFloat()
+        enx += gxs[i] / m
+        eny += gys[i] / m
+        ew += min(m, 4f * threshold)
         val slope = dy / dx // image y per image x along the edge
         val wgt = min(m, 4f * threshold)
         for (c in 0 until cols) {
@@ -207,8 +235,54 @@ class VanishingPointEstimator(
     val sharpness = (peak / (mean + 1e-3f))
     val confidence = ((sharpness - 3f) / 9f).coerceIn(0f, 1f)
     // +0.5: pixel indices are pixel centres.
-    return VanishingPoint((sx / sw + 0.5f) / w, (sy / sw + 0.5f) / h, confidence)
+    // Fine fit: the point closest (least squares) to the lines of the edges that pass near the
+    // coarse peak, twice with a tighter radius. The grid alone is only good to about half a
+    // degree; this gets it to about a tenth.
+    var vx = sx / sw
+    var vy = sy / sw
+    for (radius in floatArrayOf(3f * cellW, 1.5f * cellW)) {
+      var a11 = 0.0
+      var a12 = 0.0
+      var a22 = 0.0
+      var b1 = 0.0
+      var b2 = 0.0
+      var used = 0
+      for (k in 0 until ex.size) {
+        val nx = enx[k]
+        val ny = eny[k]
+        // Distance from the current estimate to this edge's line (normal form).
+        val dist = nx * (vx - ex[k]) + ny * (vy - ey[k])
+        if (abs(dist) > radius) continue
+        // Only edges below the vanishing point (on the road).
+        if (ey[k] <= vy) continue
+        val wk = ew[k].toDouble()
+        a11 += wk * nx * nx
+        a12 += wk * nx * ny
+        a22 += wk * ny * ny
+        val c = nx * ex[k] + ny * ey[k]
+        b1 += wk * nx * c
+        b2 += wk * ny * c
+        used++
+      }
+      val det = a11 * a22 - a12 * a12
+      if (used < 20 || abs(det) < 1e-6 * (a11 + a22) * (a11 + a22)) break
+      val nxv = ((a22 * b1 - a12 * b2) / det).toFloat()
+      val nyv = ((a11 * b2 - a12 * b1) / det).toFloat()
+      // Never let the fit wander off the peak it started from.
+      if (abs(nxv - vx) > 2.5f * cellW || abs(nyv - vy) > 2.5f * cellH) break
+      vx = nxv
+      vy = nyv
+    }
+    return VanishingPoint((vx + 0.5f) / w, (vy + 0.5f) / h, confidence)
   }
+}
+
+/** Any pixel within 2 px at (near) full white. */
+private fun nearSaturated(img: LumaImage, x: Int, y: Int): Boolean {
+  for (yy in max(0, y - 2)..min(img.height - 1, y + 2)) for (xx in max(0, x - 2)..min(img.width - 1, x + 2)) {
+    if (img[xx, yy] >= 250f) return true
+  }
+  return false
 }
 
 private fun blur3(img: LumaImage): FloatArray {
@@ -249,4 +323,18 @@ fun roadAngles(vp: VanishingPoint, aspect: Float, longSideFovDeg: Double): RoadA
   val dx = (vp.fx - 0.5) * w
   val dy = (0.5 - vp.fy) * h
   return RoadAngles(Math.toDegrees(atan(dx / f)), Math.toDegrees(atan(dy / f)))
+}
+
+/** A growable float array without boxing. */
+private class FloatList {
+  private var a = FloatArray(1024)
+  var size = 0
+    private set
+
+  operator fun plusAssign(v: Float) {
+    if (size == a.size) a = a.copyOf(size * 2)
+    a[size++] = v
+  }
+
+  operator fun get(i: Int) = a[i]
 }

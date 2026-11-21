@@ -214,7 +214,12 @@
     <string name="ar_route_ahead">Route %1$s vor Ihnen</string>
     <string name="ar_route_behind">Route %1$s hinter Ihnen</string>
     <string name="ar_rerouting">Neue Route wird gesucht…</string>
-    <string name="ar_aligning">Ausrichten auf die Straße…</string>
+    <string name="ar_fine_tuning">Feinabstimmung · zum Ausrichten ziehen</string>
+    <string name="ar_manual">Von dir ausgerichtet · doppeltippen zum Zurücksetzen</string>
+    <string name="ar_dragging">Blaue Spur auf deine Fahrspur schieben</string>
+    <string name="ar_aim_at_road">Kamera auf die Straße vor dir richten</string>
+    <string name="ar_weak_gps">Warten auf besseres GPS</string>
+    <string name="ar_on_lane">In deiner Spur</string>
     <string name="ar_locked">Auf der Straße ausgerichtet</string>
     <string name="ar_no_camera">Kamera nicht verfügbar</string>
     <string name="route_checking_border">Grenzkontrollen werden geprüft…</string>

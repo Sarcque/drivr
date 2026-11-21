@@ -80,14 +80,29 @@ What works today:
   voice come from Valhalla in the same language. To add a language: copy `values/strings.xml` to
   `values-xx/`, translate it, and add the tag to `AppLanguage.SUPPORTED` and
   `res/xml/locales_config.xml`. `StringsCompletenessTest` fails if a key or placeholder is missing.
-- AR view (enable in Settings): the camera with the route laid on the road as a solid blue,
-  lane-wide carpet, white chevrons flowing along it and a big arrow painted through the turn.
-  Opens ~300 m before each maneuver (Auto) or by hand. No ARCore: heading comes from the gyroscope
-  (frame rate) corrected by the GPS course, tilt from the gravity sensor, and the phone mount is
-  learned from the camera image itself: on straight stretches the road's vanishing point (where
-  lane lines meet, found with a small edge-voting estimator in `ar/VanishingPoint.kt`) is straight
-  ahead of the car, so its offset from the image centre is how the phone is turned and tilted.
-  Between GPS fixes the car is moved along the route at its speed, so the carpet glides.
+- AR view (enable in Settings): the camera with the route laid on the road as a solid blue
+  carpet (2.8 m, narrower than a lane so the lane lines stay visible), white chevrons flowing
+  along it and a sign with the turn arrow standing at the corner. Opens ~300 m before each
+  maneuver (Auto) or by hand. No ARCore:
+  - Heading: gyroscope at frame rate, anchored to the route's own direction at the car. A standing
+    car's GPS course is noise, so it is only used before there is a route.
+  - Tilt: gravity sensor, slowly averaged and frozen while braking, accelerating or cornering.
+  - Mount: learned from the camera image: on straight stretches the road's vanishing point (where
+    lane lines meet, `ar/VanishingPoint.kt`) is straight ahead of the car, so its offset from the
+    image centre is how the phone is turned and tilted. Or drag the blue lane onto your lane by
+    hand (kept for next time; double-tap to go back to automatic).
+  - Lane lock (`ar/LaneTracking.kt`): every frame the lane lines 7–25 m ahead are found in a
+    bird's-eye grid that bends with the route, so it works in curves too. Their position, angle
+    and width correct the carpet's sideways shift, heading and up/down tilt; glare, rain and a car
+    ahead lower the confidence instead of pulling the carpet off.
+  - Latency: the GPS fix's age and the camera's ~90 ms delay are made up for, and route corners
+    are rounded like a real turn.
+  - `ArDriveSimulationTest` renders a drive (straight, curve, turn, queue; clear, rain, low sun)
+    and measures where the carpet lands against where the road really is.
+  - The carpet starts 7 m ahead (closer is hidden by the dashboard) and fades in, stops just past
+    the turn, and is drawn only when it can be right: nothing when the camera is aimed at the
+    dashboard or the sky, GPS is weak, or the route isn't in front of the camera.
+  - Between GPS fixes the car is moved along the route at its speed, so the carpet glides.
 - Wrong way and off route: raw GPS (not snapped to the route) is checked against the route. Driving
   against it for a few seconds turns the banner (and the AR view) red with a U-turn sign and a
   spoken "turn around"; leaving the route turns it amber with an arrow towards the route.
@@ -137,8 +152,9 @@ CI builds the APK on every push. The latest build of main is always at
 ### Known limits
 
 - Phone GPS can't tell which lane you're in, so lane advice names the lanes to use rather than
-  "move right 1 lane". The AR overlay is accurate to a few metres: good for "turn here", not for
-  painting a single lane.
+  "move right 1 lane". The AR overlay follows the lane in the simulated drive (about 0.15 m off at
+  15 m, 0.7 m at 40 m) but hasn't been measured in a real car yet; faded or missing lane lines fall
+  back to the route only.
 - Routing doesn't avoid jams yet: Valhalla's public server has no live traffic. NDW delays are
   added to the ETA, and closures could be passed to a self-hosted Valhalla as `exclude_polygons`.
 - Traffic covers the Netherlands only (NDW). Other countries need their own open feed.

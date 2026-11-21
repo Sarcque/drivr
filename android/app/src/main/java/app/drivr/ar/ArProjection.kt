@@ -1,5 +1,6 @@
 package app.drivr.ar
 
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -234,4 +235,70 @@ fun pointAndDirectionAt(line: List<Enu>, atM: Double): Pair<Enu, Enu>? {
     walked += len
   }
   return null
+}
+
+/**
+ * [line] moved [shiftM] metres to the right of [headingDeg] (a plain translation, so it still
+ * starts beside the car): puts the carpet on the lane centre the camera sees.
+ */
+fun shiftSideways(line: List<Enu>, headingDeg: Double, shiftM: Double): List<Enu> {
+  if (abs(shiftM) < 0.01) return line
+  val h = Math.toRadians(headingDeg)
+  val d = Enu(cos(h) * shiftM, -sin(h) * shiftM)
+  return line.map { it + d }
+}
+
+/**
+ * Rounds the polyline's corners: each corner becomes a curve with a radius of up to [radiusM]
+ * (limited so neighbouring corners don't overlap). A car takes a junction on an arc of roughly
+ * 6-12 m, and an OSM curve drawn with a few straight pieces becomes a smooth bend.
+ */
+fun filletCorners(line: List<Enu>, radiusM: Double = 9.0, stepsPerCorner: Int = 8): List<Enu> {
+  if (line.size < 3) return line
+  val out = ArrayList<Enu>(line.size * 3)
+  out += line[0]
+  for (i in 1 until line.size - 1) {
+    val a = line[i - 1]
+    val p = line[i]
+    val b = line[i + 1]
+    val l1 = hypot(p.x - a.x, p.y - a.y)
+    val l2 = hypot(b.x - p.x, b.y - p.y)
+    if (l1 < 1e-6 || l2 < 1e-6) continue
+    val d1 = Enu((p.x - a.x) / l1, (p.y - a.y) / l1)
+    val d2 = Enu((b.x - p.x) / l2, (b.y - p.y) / l2)
+    val cosT = (d1.x * d2.x + d1.y * d2.y).coerceIn(-1.0, 1.0)
+    val theta = kotlin.math.acos(cosT)
+    if (theta < Math.toRadians(1.0)) {
+      out += p
+      continue
+    }
+    val t = minOf(radiusM * tan(theta / 2), 0.45 * l1, 0.45 * l2)
+    val s = p - d1 * t
+    val e = p + d2 * t
+    // Quadratic Bezier with the corner as control point: tangent at both ends, like an arc.
+    for (k in 0..stepsPerCorner) {
+      val u = k.toDouble() / stepsPerCorner
+      val w0 = (1 - u) * (1 - u)
+      val w1 = 2 * u * (1 - u)
+      val w2 = u * u
+      out += Enu(w0 * s.x + w1 * p.x + w2 * e.x, w0 * s.y + w1 * p.y + w2 * e.y)
+    }
+  }
+  out += line.last()
+  return out
+}
+
+/**
+ * The route's direction right at the car (first point of [line]). The bearing to a point a few
+ * metres ahead lags half the chord in a curve; extrapolating from two short chords gives the
+ * tangent itself.
+ */
+fun routeHeadingAtCar(line: List<Enu>, fallbackDeg: Double): Double {
+  val p4 = pointAndDirectionAt(line, 4.0)?.first ?: return fallbackDeg
+  val p8 = pointAndDirectionAt(line, 8.0)?.first ?: return bearingDeg(line.first(), p4)
+  val b1 = bearingDeg(line.first(), p4)
+  val b2 = bearingDeg(p4, p8)
+  val d = ((b2 - b1 + 540.0) % 360.0) - 180.0
+  // Clamp: a junction corner right ahead isn't a curve to extrapolate.
+  return normalizeDeg(b1 - d.coerceIn(-3.0, 3.0) / 2.0)
 }

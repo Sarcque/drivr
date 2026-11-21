@@ -143,11 +143,13 @@ class RoadTrackingTest {
   fun the_mount_is_learned_from_frames_and_corrects_gps_and_gravity() {
     // True mount: phone 4° to the right, camera 8° down. Gravity reads 6.5° (bias), GPS says the
     // car heads due north.
-    val engine = ArPoseEngine()
+    var now = 1_000_000_000L
+    val engine = ArPoseEngine(clockNanos = { now })
     engine.onTilt(Tilt(6.5, 0.0))
     engine.onFix(0.0, 25.0)
     engine.routeStraightAhead = true
     for (i in 0 until 12) {
+      now += 1_000_000_000L
       val (frame, w, h) = renderFrame(cameraHeadingDeg = 4.0, pitchDownDeg = 8.0, seed = i)
       val img = uprightLuma(frame, w, h, w, 90)
       val vp = VanishingPointEstimator().estimate(img)!!
@@ -240,5 +242,125 @@ class RoadTrackingTest {
     assertEquals(25.0, p.x, 1e-9)
     assertEquals(1.0, d.x, 1e-9)
     assertNull(pointAndDirectionAt(route, 101.0))
+  }
+
+  // ---- From the drive with the phone on the windscreen --------------------------------------
+
+  private class FakeClock(var nanos: Long = 1_000_000_000L) {
+    fun advance(s: Double) {
+      nanos += (s * 1e9).toLong()
+    }
+  }
+
+  @Test
+  fun standing_in_a_queue_the_route_sets_the_heading_not_the_gps_course() {
+    val clock = FakeClock()
+    val engine = ArPoseEngine(clockNanos = { clock.nanos })
+    // Standing still: the receiver reports a course of 0° (north); the street runs at 75°.
+    engine.onFix(0.0, 0.2)
+    val pose = engine.pose(75.0)
+    assertEquals(75.0, pose.headingDeg, 0.5)
+    // And it stays there while standing.
+    repeat(100) {
+      clock.advance(0.033)
+      engine.onFix(10.0, 0.1)
+      engine.pose(75.0)
+    }
+    assertEquals(75.0, engine.pose(75.0).headingDeg, 0.5)
+  }
+
+  @Test
+  fun round_a_corner_the_gyro_leads_and_the_route_catches_up_after() {
+    val clock = FakeClock()
+    val engine = ArPoseEngine(clockNanos = { clock.nanos })
+    engine.pose(0.0)
+    // A right turn: 90° in 4 s, the route's direction (first metres ahead) running a little ahead.
+    for (i in 0 until 120) {
+      clock.advance(1.0 / 30)
+      engine.onGyro(22.5, 1.0 / 30)
+      val t = (i + 1) / 30.0
+      engine.pose(minOf(90.0, 22.5 * t + 12.0))
+    }
+    // The route's corner runs a little ahead of the car's arc; never more than that.
+    assertEquals(90.0, engine.pose(90.0).headingDeg, 12.0)
+    // Straight on: settles on the road within a second or two.
+    repeat(60) {
+      clock.advance(1.0 / 30)
+      engine.onGyro(0.0, 1.0 / 30)
+      engine.pose(90.0)
+    }
+    assertEquals(90.0, engine.pose(90.0).headingDeg, 1.0)
+  }
+
+  @Test
+  fun braking_does_not_tip_the_overlay() {
+    val clock = FakeClock()
+    val engine = ArPoseEngine(clockNanos = { clock.nanos })
+    engine.onTilt(Tilt(4.0, 0.0))
+    repeat(30) {
+      clock.advance(0.02)
+      engine.onTilt(Tilt(4.0, 0.0))
+    }
+    // Braking at 3 m/s²: speed falls 3 m/s per second, and the gravity sensor reads 6° more down.
+    var v = 20.0
+    for (s in 0 until 3) {
+      engine.onFix(0.0, v)
+      repeat(50) {
+        clock.advance(0.02)
+        engine.onTilt(Tilt(10.0, 0.0))
+      }
+      v -= 3.0
+    }
+    assertEquals(4.0, engine.pose(0.0).pitchDownDeg, 1.5)
+  }
+
+  @Test
+  fun moving_the_phone_is_followed_quickly() {
+    val clock = FakeClock()
+    val engine = ArPoseEngine(clockNanos = { clock.nanos })
+    engine.onTilt(Tilt(4.0, 0.0))
+    repeat(50) {
+      clock.advance(0.02)
+      engine.onTilt(Tilt(16.0, 0.0))
+    }
+    assertEquals(16.0, engine.pose(0.0).pitchDownDeg, 1.0)
+  }
+
+  @Test
+  fun nothing_is_drawn_when_the_camera_cannot_see_the_road() {
+    val clock = FakeClock()
+    val engine = ArPoseEngine(clockNanos = { clock.nanos })
+    engine.onTilt(Tilt(40.0, 0.0))
+    assertEquals(ArTrack.AIM_AT_ROAD, engine.track(5.0))
+    repeat(50) {
+      clock.advance(0.02)
+      engine.onTilt(Tilt(4.0, 0.0))
+    }
+    assertEquals(ArTrack.WEAK_GPS, engine.track(60.0))
+    assertEquals(ArTrack.FINE_TUNING, engine.track(5.0))
+    assertFalse(ArTrack.AIM_AT_ROAD.draws)
+    assertTrue(ArTrack.FINE_TUNING.draws)
+  }
+
+  @Test
+  fun the_drivers_alignment_replaces_the_learned_mount_until_reset() {
+    val engine = ArPoseEngine()
+    engine.onTilt(Tilt(5.0, 0.0))
+    engine.setManual(-3.0, 1.0)
+    assertEquals(ArTrack.MANUAL, engine.track(5.0))
+    val p = engine.pose(90.0)
+    assertEquals(87.0, p.headingDeg, 0.5)
+    assertEquals(6.0, p.pitchDownDeg, 0.5)
+    engine.clearManual()
+    assertEquals(ArTrack.FINE_TUNING, engine.track(5.0))
+    assertEquals(90.0, engine.pose(90.0).headingDeg, 0.5)
+  }
+
+  @Test
+  fun turn_angle_from_the_route() {
+    val right = listOf(Enu(0.0, 0.0), Enu(0.0, 50.0), Enu(40.0, 50.0))
+    assertEquals(90.0, turnAngleDeg(right, 50.0), 1.0)
+    val left = listOf(Enu(0.0, 0.0), Enu(0.0, 50.0), Enu(-30.0, 80.0))
+    assertEquals(-45.0, turnAngleDeg(left, 50.0), 1.0)
   }
 }

@@ -214,7 +214,12 @@
     <string name="ar_route_ahead">Route %1$s voor je</string>
     <string name="ar_route_behind">Route %1$s achter je</string>
     <string name="ar_rerouting">Nieuwe route zoeken…</string>
-    <string name="ar_aligning">Uitlijnen op de weg…</string>
+    <string name="ar_fine_tuning">Fijnafstemmen · sleep om uit te lijnen</string>
+    <string name="ar_manual">Door jou uitgelijnd · dubbeltik om te resetten</string>
+    <string name="ar_dragging">Schuif de blauwe baan op jouw rijstrook</string>
+    <string name="ar_aim_at_road">Richt de camera op de weg voor je</string>
+    <string name="ar_weak_gps">Wachten op betere GPS</string>
+    <string name="ar_on_lane">In jouw rijstrook</string>
     <string name="ar_locked">Vast op de weg</string>
     <string name="ar_no_camera">Camera niet beschikbaar</string>
     <string name="route_checking_border">Grenscontroles nagaan…</string>
