@@ -68,7 +68,7 @@ class ArOverlayScreenshotTest {
       val toTurn = 90.0 - carY
       Canvas(Modifier.fillMaxSize()) { drawArRoute(ahead, toTurn, standing, p, phaseM = 0.0) }
       if (standing !is RouteStanding.OnRoute) StandingTint(standing)
-      ArChrome(maneuver, toTurn, standing, rerouting = false, locked = true, cameraOk = true, onClose = {})
+      ArChrome(maneuver, toTurn, standing, rerouting = false, track = ArTrack.LOCKED, cameraOk = true, onClose = {})
     }
   }
 

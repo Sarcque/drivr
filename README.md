@@ -80,14 +80,21 @@ What works today:
   voice come from Valhalla in the same language. To add a language: copy `values/strings.xml` to
   `values-xx/`, translate it, and add the tag to `AppLanguage.SUPPORTED` and
   `res/xml/locales_config.xml`. `StringsCompletenessTest` fails if a key or placeholder is missing.
-- AR view (enable in Settings): the camera with the route laid on the road as a solid blue,
-  lane-wide carpet, white chevrons flowing along it and a big arrow painted through the turn.
-  Opens ~300 m before each maneuver (Auto) or by hand. No ARCore: heading comes from the gyroscope
-  (frame rate) corrected by the GPS course, tilt from the gravity sensor, and the phone mount is
-  learned from the camera image itself: on straight stretches the road's vanishing point (where
-  lane lines meet, found with a small edge-voting estimator in `ar/VanishingPoint.kt`) is straight
-  ahead of the car, so its offset from the image centre is how the phone is turned and tilted.
-  Between GPS fixes the car is moved along the route at its speed, so the carpet glides.
+- AR view (enable in Settings): the camera with the route laid on the road as a solid blue
+  carpet (2.8 m, narrower than a lane so the lane lines stay visible), white chevrons flowing
+  along it and a sign with the turn arrow standing at the corner. Opens ~300 m before each
+  maneuver (Auto) or by hand. No ARCore:
+  - Heading: gyroscope at frame rate, anchored to the route's own direction at the car. A standing
+    car's GPS course is noise, so it is only used before there is a route.
+  - Tilt: gravity sensor, slowly averaged and frozen while braking, accelerating or cornering.
+  - Mount: learned from the camera image: on straight stretches the road's vanishing point (where
+    lane lines meet, `ar/VanishingPoint.kt`) is straight ahead of the car, so its offset from the
+    image centre is how the phone is turned and tilted. Or drag the blue lane onto your lane by
+    hand (kept for next time; double-tap to go back to automatic).
+  - The carpet starts 7 m ahead (closer is hidden by the dashboard) and fades in, stops just past
+    the turn, and is drawn only when it can be right: nothing when the camera is aimed at the
+    dashboard or the sky, GPS is weak, or the route isn't in front of the camera.
+  - Between GPS fixes the car is moved along the route at its speed, so the carpet glides.
 - Wrong way and off route: raw GPS (not snapped to the route) is checked against the route. Driving
   against it for a few seconds turns the banner (and the AR view) red with a U-turn sign and a
   spoken "turn around"; leaving the route turns it amber with an arrow towards the route.

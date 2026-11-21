@@ -214,7 +214,11 @@
     <string name="ar_route_ahead">Ruta a %1$s delante</string>
     <string name="ar_route_behind">Ruta a %1$s detrás de ti</string>
     <string name="ar_rerouting">Buscando una ruta nueva…</string>
-    <string name="ar_aligning">Alineando con la carretera…</string>
+    <string name="ar_fine_tuning">Ajuste fino · arrastra para alinear</string>
+    <string name="ar_manual">Alineado por ti · toca dos veces para restablecer</string>
+    <string name="ar_dragging">Desliza el carril azul sobre tu carril</string>
+    <string name="ar_aim_at_road">Apunta la cámara a la carretera</string>
+    <string name="ar_weak_gps">Esperando mejor señal GPS</string>
     <string name="ar_locked">Fijado a la carretera</string>
     <string name="ar_no_camera">Cámara no disponible</string>
     <string name="route_checking_border">Comprobando controles fronterizos…</string>
