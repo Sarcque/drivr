@@ -34,6 +34,12 @@ What works today:
 - MapLibre map with a driving camera (zoom 17.6, 60° pitch, puck in the lower third).
 - Routing through Valhalla with Ferrostar's navigation session: snapping, step advance, rerouting,
   spoken instructions (Android TTS), foreground service.
+- Live position like a car navigator (`location/`): Android's own location services at high
+  accuracy once a second (no Play Services), a Kalman filter that drops stale, rough (Wi-Fi/cell)
+  and impossible fixes (multipath jumps), the heading held while standing still, the car carried
+  on along the route through tunnels, and a 60 fps animator that draws the car where it is *now*
+  (dead reckoning between fixes, along the route line) for both the puck and the camera. A
+  simulated noisy drive (`LocationPipelineTest`) checks it: mean error 61 m → 6.5 m, no jumps.
 - Early lane changes: the banner counts the worst-case lane changes to the exit lane and starts
   "Move right now · up to 4 lanes" early enough (400 m per change, at most one left in the final
   500 m, plus a heads-up 1.5 km before that on motorways).
