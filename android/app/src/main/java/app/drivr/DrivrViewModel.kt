@@ -139,6 +139,7 @@ data class PlanState(
 class DrivrViewModel(
     private val core: FerrostarCore = AppModule.ferrostarCore,
     private val locationProvider: NavigationLocationProvider = AppModule.locationProvider,
+    private val liveLocation: app.drivr.location.DrivrLocationProvider? = AppModule.liveLocation,
     private val traffic: TrafficRepository = AppModule.traffic,
     private val placesRepo: PlacesRepository = AppModule.places,
     private val cameraClient: SpeedCameraClient = AppModule.speedCameras,
@@ -275,10 +276,17 @@ class DrivrViewModel(
     traffic.start(viewModelScope)
     watchRouteForCameras()
     viewModelScope.launch { trafficAhead.collect(::maybeLookForFasterRoute) }
+    // GPS lost while driving a route (tunnel): the location provider carries on along it.
+    viewModelScope.launch {
+      super.navigationUiState
+          .map { ui -> ui.routeGeometry?.takeIf { ui.isNavigating() } }
+          .distinctUntilChanged { a, b -> a === b }
+          .collect { geometry -> liveLocation?.followRoute(geometry?.map { it.lat to it.lng }, geometry) }
+    }
     viewModelScope.launch {
       hasLocationPermission
           .flatMapLatest { granted ->
-            if (granted) locationProvider.locationUpdates(2000L).map { it.toUserLocation() }
+            if (granted) locationProvider.locationUpdates(1000L).map { it.toUserLocation() }
             else flowOf(DemoRoute.origin)
           }
           .collect {

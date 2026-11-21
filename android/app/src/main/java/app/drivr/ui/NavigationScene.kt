@@ -312,10 +312,13 @@ fun NavigationScene(viewModel: DrivrViewModel) {
 
   BoxWithConstraints(Modifier.fillMaxSize().background(Drivr.card)) {
     val screenH = maxHeight
+    // The map (camera and car) follows the smoothed, every-frame position; everything else keeps
+    // reading the real fixes. Only this block recomposes per frame.
+    WithSmoothedLocation(uiState) { mapUi ->
     NavigationMapView(
         baseStyle = rememberDrivrStyle(buildings3d = settings.buildings3d),
         navigationMapState = mapState,
-        uiState = uiState,
+        uiState = mapUi,
         // No MapLibre ornaments: they sat under our cards. Attribution is in Settings and on the
         // start card.
         mapOptions = MapOptions(ornamentOptions = OrnamentOptions.AllDisabled),
@@ -323,7 +326,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
             RouteOverlayBuilder(
                 navigationPath = {
                   AlternativeRoutesLayer(altRoutes)
-                  DrivrRouteLine(it)
+                  DrivrRouteLine(uiState)
                 }),
         navigationCameraOptions =
             if (landscape) drivingCameraOptions(screenH, bottomCards = 24.dp, startPanel = sidePanelW)
@@ -353,6 +356,7 @@ fun NavigationScene(viewModel: DrivrViewModel) {
           ChevronPuck(state)
         },
     )
+    }
 
     if (showAr) {
       ArJunctionView(

@@ -5,7 +5,6 @@ import com.stadiamaps.ferrostar.composeui.notification.DefaultForegroundNotifica
 import com.stadiamaps.ferrostar.core.AndroidTtsObserver
 import com.stadiamaps.ferrostar.core.FerrostarCore
 import com.stadiamaps.ferrostar.core.http.OkHttpClientProvider.Companion.toOkHttpClientProvider
-import com.stadiamaps.ferrostar.core.location.AndroidLocationProvider
 import com.stadiamaps.ferrostar.core.location.NavigationLocationProvider
 import com.stadiamaps.ferrostar.core.location.SimulatedLocationProvider
 import com.stadiamaps.ferrostar.core.location.toAndroidLocation
@@ -30,7 +29,8 @@ import uniffi.ferrostar.stepAdvanceDistanceToEndOfStep
 
 /**
  * Hand-rolled dependency wiring. Every service here is free and open:
- * - Location: Android's own LocationManager (no Google Play Services).
+ * - Location: Android's own LocationManager (no Google Play Services), high accuracy, filtered,
+ *   smoothed and bridged through tunnels by [app.drivr.location.DrivrLocationProvider].
  * - Routing: Valhalla (FOSS), see BuildConfig.VALHALLA_URL.
  * - Map: MapLibre Native (FOSS) with Drivr's own style on OpenFreeMap tiles (style/ in the repo).
  * - Traffic: NDW open data (Dutch government, free, no key).
@@ -42,9 +42,14 @@ object AppModule {
     appContext = context.applicationContext
   }
 
+  /** The phone's real position (high accuracy, filtered; see DrivrLocationProvider). */
+  val liveLocation: app.drivr.location.DrivrLocationProvider by lazy {
+    app.drivr.location.DrivrLocationProvider(appContext)
+  }
+
   val locationProvider: NavigationLocationProvider by lazy {
     NavigationLocationProvider(
-        liveProviding = AndroidLocationProvider(appContext),
+        liveProviding = liveLocation,
         simulatedProvider =
             SimulatedLocationProvider(
                 warpFactor = 2u,
