@@ -219,6 +219,7 @@
     <string name="ar_dragging">Faites glisser la voie bleue sur votre voie</string>
     <string name="ar_aim_at_road">Orientez la caméra vers la route</string>
     <string name="ar_weak_gps">En attente d\'un meilleur GPS</string>
+    <string name="ar_on_lane">Dans votre voie</string>
     <string name="ar_locked">Calé sur la route</string>
     <string name="ar_no_camera">Caméra indisponible</string>
     <string name="route_checking_border">Vérification des contrôles frontaliers…</string>

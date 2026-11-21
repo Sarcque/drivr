@@ -219,6 +219,7 @@
     <string name="ar_dragging">Desliza el carril azul sobre tu carril</string>
     <string name="ar_aim_at_road">Apunta la cámara a la carretera</string>
     <string name="ar_weak_gps">Esperando mejor señal GPS</string>
+    <string name="ar_on_lane">En tu carril</string>
     <string name="ar_locked">Fijado a la carretera</string>
     <string name="ar_no_camera">Cámara no disponible</string>
     <string name="route_checking_border">Comprobando controles fronterizos…</string>

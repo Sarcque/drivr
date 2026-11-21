@@ -109,7 +109,9 @@ private fun buildScene(ui: NavigationUiState, nowNanos: Long): ArScene? {
   val geometry = ui.routeGeometry ?: return null
   val origin = LatLng(loc.coordinates.lat, loc.coordinates.lng)
   val enu = geometry.map { LatLng(it.lat, it.lng).toEnu(origin) }
-  val ahead = routeAhead(enu, aheadM = 400.0, stepM = 2.0)
+  // Rounded corners: a car drives an arc through a junction, not the sharp corner of the OSM way.
+  val ahead =
+      routeAhead(filletCorners(enu), aheadM = 400.0, stepM = 2.0)
   if (ahead.size < 3) return null
   val routeBearing = bearingDeg(ahead.first(), ahead[minOf(5, ahead.lastIndex)])
   return ArScene(
@@ -117,16 +119,25 @@ private fun buildScene(ui: NavigationUiState, nowNanos: Long): ArScene? {
       maneuverAtM = ui.progress?.distanceToNextManeuver,
       speedMps = loc.speed?.value ?: 0.0,
       routeHeadingDeg = routeBearing,
-      fixNanos = nowNanos,
+      // The fix is already a little old when it gets here (GPS chip, snapping): count from when
+      // it was taken, or the car is drawn half a second behind where it is.
+      fixNanos = nowNanos - fixAgeNanos(loc.timestamp),
   )
+}
+
+/** Age of a fix by its own clock, 0-1.5 s (a phone clock a bit off can't make it silly). */
+internal fun fixAgeNanos(taken: java.time.Instant?): Long {
+  taken ?: return 0L
+  val ms = System.currentTimeMillis() - taken.toEpochMilli()
+  return ms.coerceIn(0L, 1500L) * 1_000_000L
 }
 
 /**
  * The scene moved on to [nowNanos]: the car advanced along the route at its last known speed
- * (at most 1.5 s worth, so a lost fix doesn't run away), re-centred on the car.
+ * (at most 2.5 s worth, so a lost fix doesn't run away), re-centred on the car.
  */
 internal fun ArScene.at(nowNanos: Long): Pair<List<Enu>, Double?> {
-  val dt = ((nowNanos - fixNanos) / 1e9).coerceIn(0.0, 1.5)
+  val dt = ((nowNanos - fixNanos) / 1e9).coerceIn(0.0, 2.5)
   val s = speedMps * dt
   if (s < 0.05) return ahead to maneuverAtM
   return reOrigin(sliceAlong(ahead, s)) to maneuverAtM?.minus(s)
@@ -244,9 +255,12 @@ fun ArJunctionView(
                     })
               }) {
         val now = frameNanos
-        val (line, maneuverAt) = scene.at(now)
-        val routeHeading =
-            pointAndDirectionAt(line, 8.0)?.let { bearingDeg(line.first(), it.first) } ?: scene.routeHeadingDeg
+        // For the moment the camera picture on screen was taken, like the pose.
+        val (raw, maneuverAt) = scene.at(now - (engine.cameraLatencyS * 1e9).toLong())
+        val routeHeading = routeHeadingAtCar(raw, scene.routeHeadingDeg)
+        engine.routeLine = raw
+        // Onto the lane the camera sees.
+        val line = shiftSideways(raw, routeHeading, engine.laneShiftM())
         val projector = ArProjector(engine.pose(routeHeading), size.width, size.height, fovDeg)
         val t = if (dragging) ArTrack.MANUAL else track
         drawArRoute(line, maneuverAt, standing, projector, phaseM = (now / 1e9 * 9.0) % CHEVRON_GAP_M, track = t)
@@ -289,6 +303,7 @@ private fun RegisterPoseSensors(engine: ArPoseEngine) {
                 if (lastNs != 0L) {
                   val rate = headingRateDegPerS(g[0], g[1], g[2], e.values[0], e.values[1], e.values[2])
                   engine.onGyro(rate, (e.timestamp - lastNs) / 1e9)
+                  engine.onTiltRate(tiltRateDegPerS(g[0], g[1], g[2], e.values[0], e.values[1], e.values[2]))
                 }
                 lastNs = e.timestamp
               }
@@ -322,11 +337,30 @@ private fun CameraWithRoadTracking(engine: ArPoseEngine, onFov: (Double) -> Unit
         providerFuture.addListener(
             {
               val provider = providerFuture.get()
-              val preview = Preview.Builder().build().also { it.surfaceProvider = view.surfaceProvider }
+              // Preview and analysis both 4:3 (the full sensor): the pose maths assumes both see the
+              // same field of view along the long side.
+              val fourThree =
+                  androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
+                      .setAspectRatioStrategy(
+                          androidx.camera.core.resolutionselector.AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                      .build()
+              val preview =
+                  Preview.Builder().setResolutionSelector(fourThree).build().also { it.surfaceProvider = view.surfaceProvider }
               val estimator = VanishingPointEstimator()
+              val laneDetector = LaneDetector()
               var lastMs = 0L
               val analysis =
                   ImageAnalysis.Builder()
+                      .setResolutionSelector(
+                          androidx.camera.core.resolutionselector.ResolutionSelector.Builder()
+                              .setAspectRatioStrategy(
+                                  androidx.camera.core.resolutionselector.AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                              .setResolutionStrategy(
+                                  androidx.camera.core.resolutionselector.ResolutionStrategy(
+                                      android.util.Size(640, 480),
+                                      androidx.camera.core.resolutionselector.ResolutionStrategy
+                                          .FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER))
+                              .build())
                       .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                       .build()
               analysis.setAnalyzer(executor) { image ->
@@ -340,6 +374,12 @@ private fun CameraWithRoadTracking(engine: ArPoseEngine, onFov: (Double) -> Unit
                   val img = uprightLuma(bytes, it.width, it.height, plane.rowStride, it.imageInfo.rotationDegrees)
                   estimator.estimate(img)?.let { vp ->
                     engine.onVanishingPoint(vp, img.width.toFloat() / img.height)
+                  }
+                  // Lane lines, laid out along the route with the pose we draw with.
+                  val pose = engine.peekPose()
+                  val heading = engine.routeHeading()
+                  if (pose != null && heading != null) {
+                    engine.onLane(laneDetector.detect(img, pose, engine.fovDeg(), heading, engine.routeLine, engine.laneWidthM()))
                   }
                 }
               }
@@ -356,8 +396,19 @@ private fun CameraWithRoadTracking(engine: ArPoseEngine, onFov: (Double) -> Unit
                     val sensor =
                         info.getCameraCharacteristic(
                             android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
+                    // Only the active part of the sensor makes the picture.
+                    val pixels =
+                        info.getCameraCharacteristic(
+                            android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
+                    val active =
+                        info.getCameraCharacteristic(
+                            android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+                    val activeFraction =
+                        if (pixels != null && active != null && pixels.width > 0)
+                            (active.width().toFloat() / pixels.width).coerceIn(0.5f, 1f)
+                        else 1f
                     if (focal != null && sensor != null && focal > 0f) {
-                      val long = max(sensor.width, sensor.height)
+                      val long = max(sensor.width, sensor.height) * activeFraction
                       Math.toDegrees(2.0 * atan(long / (2.0 * focal)))
                     } else null
                   }
@@ -710,7 +761,7 @@ internal fun ArChrome(
           Modifier.clip(RoundedCornerShape(50)).background(Drivr.card.copy(alpha = 0.85f)).padding(horizontal = 14.dp, vertical = 10.dp),
           verticalAlignment = Alignment.CenterVertically,
       ) {
-        val good = track == ArTrack.LOCKED || track == ArTrack.MANUAL
+        val good = track == ArTrack.LOCKED || track == ArTrack.MANUAL || track == ArTrack.ON_LANE
         Box(Modifier.size(10.dp).clip(CircleShape).background(if (good && cameraOk) Drivr.ok else Drivr.hint))
         Spacer(Modifier.width(8.dp))
         Text(
@@ -720,6 +771,7 @@ internal fun ArChrome(
               track == ArTrack.AIM_AT_ROAD -> stringResource(R.string.ar_aim_at_road)
               track == ArTrack.WEAK_GPS -> stringResource(R.string.ar_weak_gps)
               track == ArTrack.MANUAL -> stringResource(R.string.ar_manual)
+              track == ArTrack.ON_LANE -> stringResource(R.string.ar_on_lane)
               track == ArTrack.LOCKED -> stringResource(R.string.ar_locked)
               else -> stringResource(R.string.ar_fine_tuning)
             },

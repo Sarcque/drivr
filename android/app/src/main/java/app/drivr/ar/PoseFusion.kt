@@ -26,6 +26,20 @@ fun headingRateDegPerS(gx: Float, gy: Float, gz: Float, wx: Float, wy: Float, wz
 }
 
 /**
+ * How fast the phone tips or rolls, °/s: the gyro's rotation about level axes (everything except
+ * turning about the vertical). Unsigned.
+ */
+fun tiltRateDegPerS(gx: Float, gy: Float, gz: Float, wx: Float, wy: Float, wz: Float): Double {
+  val n = sqrt(gx * gx + gy * gy + gz * gz)
+  if (n < 1e-3f) return 0.0
+  val up = (wx * gx + wy * gy + wz * gz) / n
+  val hx = wx - up * gx / n
+  val hy = wy - up * gy / n
+  val hz = wz - up * gz / n
+  return Math.toDegrees(sqrt((hx * hx + hy * hy + hz * hz).toDouble()))
+}
+
+/**
  * The car's heading, smooth at frame rate.
  *
  * - The gyroscope carries it through curves and between GPS fixes.
@@ -72,7 +86,7 @@ class HeadingFuser {
    * heading towards it within about a second on straight roads; in a corner the gyro leads and
    * the pull is gentle, because the route's corner and the car's arc don't line up exactly.
    */
-  fun onRoute(routeDeg: Double, dtS: Double) {
+  fun onRoute(routeDeg: Double, dtS: Double, slow: Boolean = false) {
     hasRoute = true
     val h = headingDeg
     if (h == null) {
@@ -86,7 +100,9 @@ class HeadingFuser {
       return
     }
     val dt = dtS.coerceIn(0.0, 0.5)
-    val tau = if (turning) 2.5 else if (hasGyro) 0.8 else 0.3
+    // [slow]: the camera sees the lane lines and steers the carpet itself; then the route (whose
+    // direction steps a little at every OSM vertex) only needs to keep the gyro from drifting.
+    val tau = if (turning) 2.5 else if (slow) 3.0 else if (hasGyro) 0.8 else 0.3
     headingDeg = normalizeDeg(h + err * (1.0 - exp(-dt / tau)))
   }
 
@@ -199,10 +215,12 @@ enum class ArTrack {
   LOCKED,
   /** Lined up by hand (drag) and kept. */
   MANUAL,
+  /** Following the lane markings seen by the camera right now: the carpet sits in your lane. */
+  ON_LANE,
   ;
 
   val draws: Boolean
-    get() = this == FINE_TUNING || this == LOCKED || this == MANUAL
+    get() = this != AIM_AT_ROAD && this != WEAK_GPS
 }
 
 /** Pitch within this range (°, down positive) means the camera can see the road ahead. */
@@ -225,11 +243,29 @@ class ArPoseEngine(
   private var tilt = Tilt(8.0, 0.0)
   private var tiltNanos = 0L
   private var followUntilNanos = 0L
+  private var steadySinceNanos = 0L
+  private var fakeTiltUntilNanos = 0L
+  private var hasTiltGyro = false
+  private var tiltGyroRateDegPerS = 0.0
   private var speedMps = 0.0
   private var fixNanos = 0L
   private var accelMps2 = 0.0
   private var lastPoseNanos = 0L
   private var manual: Pair<Double, Double>? = null
+  private val lane = LaneLock()
+  private var lastRouteHeading: Double? = null
+
+  /** The route ahead as last drawn (starting at the car, before the lane shift), for the lanes. */
+  @Volatile var routeLine: List<Enu>? = null
+
+  /** Use lane markings to put the carpet on the lane (off = only the pose, for comparison). */
+  @Volatile var laneLockEnabled = true
+
+  /**
+   * How old the camera picture on screen is (sensor exposure to display), seconds. The overlay is
+   * drawn for that moment, so in a corner it doesn't run ahead of the picture.
+   */
+  @Volatile var cameraLatencyS = 0.09
 
   /** Set by the scene: the route runs straight ahead for a good distance. */
   @Volatile var routeStraightAhead = false
@@ -257,10 +293,16 @@ class ArPoseEngine(
     val dt = ((now - tiltNanos) / 1e9).coerceIn(0.0, 0.5)
     tiltNanos = now
     val jump = maxOf(abs(t.pitchDownDeg - tilt.pitchDownDeg), abs(t.rollDeg - tilt.rollDeg))
-    // A jump bigger than braking or cornering can fake: the phone itself was moved (on its mount
-    // or in the hand). Follow quickly for a moment.
-    if (jump > 8.0) followUntilNanos = now + 1_000_000_000L
-    val carForces = abs(accelMps2) > 1.0 || abs(heading.turnRateDegPerS) > 4.0
+    // The phone itself moved (on its mount, or in the hand): the gyro sees it turn. Follow
+    // quickly for a moment. Without a gyro, a jump bigger than braking can fake means the same.
+    if (tiltGyroRateDegPerS > 8.0 || (!hasTiltGyro && jump > 8.0)) followUntilNanos = now + 1_000_000_000L
+    // The gravity reading tilts faster than the gyro says the phone turns: that's the car
+    // braking, accelerating or cornering, not the phone. Ignore it, and a little after.
+    if (hasTiltGyro && dt > 0) {
+      val readRate = maxOf(abs(t.pitchDownDeg - prev.pitchDownDeg), abs(t.rollDeg - prev.rollDeg)) / dt
+      if (readRate > tiltGyroRateDegPerS + 1.5) fakeTiltUntilNanos = now + 1_500_000_000L
+    }
+    val carForces = abs(accelMps2) > 1.0 || abs(heading.turnRateDegPerS) > 4.0 || now < fakeTiltUntilNanos
     val tau =
         when {
           now < followUntilNanos -> 0.2
@@ -274,6 +316,16 @@ class ArPoseEngine(
   @Synchronized
   fun onGyro(rateDegPerS: Double, dtS: Double) {
     heading.onGyro(rateDegPerS, dtS)
+  }
+
+  /**
+   * How fast the phone tips or rolls (rotation about any level axis), °/s, from the gyro. Sign
+   * doesn't matter: it only tells real tilting apart from the car's forces on the gravity sensor.
+   */
+  @Synchronized
+  fun onTiltRate(degPerS: Double) {
+    hasTiltGyro = true
+    tiltGyroRateDegPerS += 0.3 * (degPerS - tiltGyroRateDegPerS)
   }
 
   @Synchronized
@@ -293,11 +345,23 @@ class ArPoseEngine(
   fun onVanishingPoint(vp: VanishingPoint, aspect: Float): Boolean {
     lastVanishingPoint = vp
     if (manual != null) return false
-    val steady = abs(heading.turnRateDegPerS) < 3.0 && speedMps > 3.0
-    return mount.onMeasurement(roadAngles(vp, aspect, longSideFovDeg()), tilt.pitchDownDeg, vp.confidence, routeStraightAhead && steady)
+    // Steady driving only: braking and accelerating fool the gravity sensor, and the mount's
+    // pitch bias would learn that instead of the mount.
+    val now = clockNanos()
+    if (abs(heading.turnRateDegPerS) >= 3.0 || speedMps <= 3.0 || abs(accelMps2) >= 0.6) steadySinceNanos = now
+    // ...for a few seconds, so the slow tilt average has caught up with the end of a pull-away.
+    val steady = now - steadySinceNanos > 3_000_000_000L
+    val before = mount.state
+    val used = mount.onMeasurement(roadAngles(vp, aspect, longSideFovDeg()), tilt.pitchDownDeg, vp.confidence, routeStraightAhead && steady)
+    // The lane lock corrects what's left on top of the mount; when the mount estimate moves, the
+    // lane lock gives that much back, so nothing is corrected twice.
+    if (used) lane.absorb(mount.state.yawOffsetDeg - before.yawOffsetDeg, mount.state.pitchBiasDeg - before.pitchBiasDeg)
+    return used
   }
 
   @Synchronized fun mountState(): MountState = mount.state
+
+  fun fovDeg(): Double = longSideFovDeg()
 
   @Synchronized fun speed(): Double = speedMps
 
@@ -314,6 +378,7 @@ class ArPoseEngine(
   fun clearManual() {
     manual = null
     mount.reset()
+    lane.reset()
   }
 
   /** Mount offsets in use now: the driver's, else the learned ones. */
@@ -329,16 +394,51 @@ class ArPoseEngine(
     val now = clockNanos()
     val dt = if (lastPoseNanos == 0L) 0.0 else (now - lastPoseNanos) / 1e9
     lastPoseNanos = now
-    heading.onRoute(routeHeadingDeg, dt)
+    heading.onRoute(routeHeadingDeg, dt, slow = laneLockEnabled && lane.quality > 0.6f)
+    lastRouteHeading = routeHeadingDeg
+    return currentPose(routeHeadingDeg)
+  }
+
+  /** The pose as it stands, without advancing any filter (for the camera analyser thread). */
+  @Synchronized
+  fun peekPose(): CameraPose? = lastRouteHeading?.let { currentPose(it) }
+
+  /** The route's direction at the car as of the last drawn frame. */
+  @Synchronized fun routeHeading(): Double? = lastRouteHeading
+
+  private fun currentPose(routeHeadingDeg: Double): CameraPose {
     val (yaw, pitchBias) = offsets()
     val car = heading.headingDeg ?: routeHeadingDeg
+    val laneYaw = if (laneLockEnabled && manual == null) lane.yawDeg else 0.0
+    val lanePitch = if (laneLockEnabled && manual == null) lane.pitchDeg else 0.0
+    // The picture on screen is a little old: draw for where the camera pointed then.
+    val lag = heading.turnRateDegPerS * cameraLatencyS
     return CameraPose(
-        headingDeg = normalizeDeg(car + yaw),
-        pitchDownDeg = tilt.pitchDownDeg + pitchBias,
+        headingDeg = normalizeDeg(car + yaw - laneYaw - lag),
+        pitchDownDeg = tilt.pitchDownDeg + pitchBias + lanePitch,
         rollDeg = tilt.rollDeg,
         heightM = 1.25,
     )
   }
+
+  /** A lane measurement from the camera (null: looked, found none). */
+  @Synchronized
+  fun onLane(m: LaneMeasurement?) {
+    lane.onMeasurement(m, clockNanos(), turning = abs(heading.turnRateDegPerS) > 8.0)
+  }
+
+  /** Sideways move of the carpet onto the lane centre, metres to the right. */
+  @Synchronized
+  fun laneShiftM(): Double = if (laneLockEnabled) lane.shiftM else 0.0
+
+  /** The lane lock's current turn and pitch corrections, °, for diagnostics. */
+  @Synchronized fun laneCorrections(): Pair<Double, Double> = lane.yawDeg to lane.pitchDeg
+
+  /** Lane width being seen, m (3.3 until measured). */
+  @Synchronized fun laneWidthM(): Double = lane.widthM
+
+  /** 0..1: how well the lane lines are being seen right now. */
+  @Synchronized fun laneQuality(): Float = if (laneLockEnabled) lane.quality else 0f
 
   /** What the status chip says, and whether the overlay is drawn at all. */
   @Synchronized
@@ -348,6 +448,7 @@ class ArPoseEngine(
     if (gpsAccuracyM != null && gpsAccuracyM > 30.0) return ArTrack.WEAK_GPS
     return when {
       manual != null -> ArTrack.MANUAL
+      laneLockEnabled && lane.quality > 0.5f -> ArTrack.ON_LANE
       mount.state.locked -> ArTrack.LOCKED
       else -> ArTrack.FINE_TUNING
     }

@@ -143,11 +143,13 @@ class RoadTrackingTest {
   fun the_mount_is_learned_from_frames_and_corrects_gps_and_gravity() {
     // True mount: phone 4° to the right, camera 8° down. Gravity reads 6.5° (bias), GPS says the
     // car heads due north.
-    val engine = ArPoseEngine()
+    var now = 1_000_000_000L
+    val engine = ArPoseEngine(clockNanos = { now })
     engine.onTilt(Tilt(6.5, 0.0))
     engine.onFix(0.0, 25.0)
     engine.routeStraightAhead = true
     for (i in 0 until 12) {
+      now += 1_000_000_000L
       val (frame, w, h) = renderFrame(cameraHeadingDeg = 4.0, pitchDownDeg = 8.0, seed = i)
       val img = uprightLuma(frame, w, h, w, 90)
       val vp = VanishingPointEstimator().estimate(img)!!

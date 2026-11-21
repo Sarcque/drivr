@@ -219,6 +219,7 @@
     <string name="ar_dragging">Blaue Spur auf deine Fahrspur schieben</string>
     <string name="ar_aim_at_road">Kamera auf die Straße vor dir richten</string>
     <string name="ar_weak_gps">Warten auf besseres GPS</string>
+    <string name="ar_on_lane">In deiner Spur</string>
     <string name="ar_locked">Auf der Straße ausgerichtet</string>
     <string name="ar_no_camera">Kamera nicht verfügbar</string>
     <string name="route_checking_border">Grenzkontrollen werden geprüft…</string>

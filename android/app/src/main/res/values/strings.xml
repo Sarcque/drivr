@@ -220,6 +220,7 @@
     <string name="ar_dragging">Slide the blue lane onto your lane</string>
     <string name="ar_aim_at_road">Aim the camera at the road ahead</string>
     <string name="ar_weak_gps">Waiting for a better GPS fix</string>
+    <string name="ar_on_lane">In your lane</string>
     <string name="ar_locked">Locked to the road</string>
     <string name="ar_no_camera">Camera not available</string>
     <string name="route_checking_border">Checking border checks…</string>
